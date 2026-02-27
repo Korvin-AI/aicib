@@ -1,0 +1,233 @@
+name: full-c-suite
+display_name: Full C-Suite
+description: "CEO + CTO + CFO + CMO with full teams (8 agents)"
+agent_count: 8
+
+roles:
+  ceo:
+    title: Chief Executive Officer
+    model: opus
+    reports_to: human-founder
+    department: executive
+    spawns: []
+    tools:
+      - Read
+      - Write
+      - Edit
+      - Glob
+      - Grep
+      - Bash
+      - Task
+      - SendMessage
+      - TeamCreate
+      - TodoWrite
+      - WebSearch
+      - WebFetch
+    escalation_threshold: high
+    check_in_interval: "4h"
+    autonomy_level: full
+    skills:
+      - project_planning
+      - stakeholder_reporting
+    escalation_priority: critical
+
+  cto:
+    title: Chief Technology Officer
+    model: opus
+    reports_to: ceo
+    department: engineering
+    spawns:
+      - backend-engineer
+      - frontend-engineer
+    tools:
+      - Read
+      - Write
+      - Edit
+      - Glob
+      - Grep
+      - Bash
+      - Task
+      - SendMessage
+      - TodoWrite
+      - WebSearch
+      - WebFetch
+    escalation_threshold: medium
+    autonomy_level: autonomous
+    skills:
+      - architecture_design
+      - code_review
+      - project_planning
+    escalation_priority: high
+
+  cfo:
+    title: Chief Financial Officer
+    model: sonnet
+    reports_to: ceo
+    department: finance
+    spawns:
+      - financial-analyst
+    tools:
+      - Read
+      - Write
+      - Edit
+      - Glob
+      - Grep
+      - Bash
+      - Task
+      - SendMessage
+      - TodoWrite
+      - WebSearch
+      - WebFetch
+    escalation_threshold: medium
+    autonomy_level: autonomous
+    skills:
+      - financial_modeling
+      - market_analysis
+      - budget_tracking
+    escalation_priority: high
+
+  cmo:
+    title: Chief Marketing Officer
+    model: sonnet
+    reports_to: ceo
+    department: marketing
+    spawns:
+      - content-writer
+    tools:
+      - Read
+      - Write
+      - Edit
+      - Glob
+      - Grep
+      - Bash
+      - Task
+      - SendMessage
+      - TodoWrite
+      - WebSearch
+      - WebFetch
+    escalation_threshold: medium
+    autonomy_level: autonomous
+    skills:
+      - content_strategy
+      - copywriting
+      - market_analysis
+    escalation_priority: high
+
+  backend-engineer:
+    title: Backend Engineer
+    model: sonnet
+    reports_to: cto
+    department: engineering
+    spawns: []
+    tools:
+      - Read
+      - Write
+      - Edit
+      - Glob
+      - Grep
+      - Bash
+      - TodoWrite
+    escalation_threshold: low
+    autonomy_level: guided
+    skills:
+      - api_development
+      - code_review
+      - testing
+    escalation_priority: medium
+
+  frontend-engineer:
+    title: Frontend Engineer
+    model: sonnet
+    reports_to: cto
+    department: engineering
+    spawns: []
+    tools:
+      - Read
+      - Write
+      - Edit
+      - Glob
+      - Grep
+      - Bash
+      - TodoWrite
+    escalation_threshold: low
+    autonomy_level: guided
+    skills:
+      - frontend_development
+      - code_review
+      - testing
+    escalation_priority: medium
+
+  financial-analyst:
+    title: Financial Analyst
+    model: sonnet
+    reports_to: cfo
+    department: finance
+    spawns: []
+    tools:
+      - Read
+      - Write
+      - Edit
+      - Glob
+      - Grep
+      - Bash
+      - TodoWrite
+      - WebSearch
+      - WebFetch
+    escalation_threshold: low
+    autonomy_level: guided
+    skills:
+      - financial_modeling
+      - market_analysis
+      - research
+    escalation_priority: medium
+
+  content-writer:
+    title: Content Writer
+    model: sonnet
+    reports_to: cmo
+    department: marketing
+    spawns: []
+    tools:
+      - Read
+      - Write
+      - Edit
+      - Glob
+      - Grep
+      - Bash
+      - TodoWrite
+      - WebSearch
+      - WebFetch
+    escalation_threshold: low
+    autonomy_level: guided
+    skills:
+      - copywriting
+      - seo_optimization
+      - research
+    escalation_priority: medium
+
+config_template:
+  agents:
+    ceo:
+      enabled: true
+      model: opus
+      check_in_interval: "4h"
+    cto:
+      enabled: true
+      model: opus
+      workers:
+        - backend-engineer:
+            model: sonnet
+        - frontend-engineer:
+            model: sonnet
+    cfo:
+      enabled: true
+      model: sonnet
+      workers:
+        - financial-analyst:
+            model: sonnet
+    cmo:
+      enabled: true
+      model: sonnet
+      workers:
+        - content-writer:
+            model: sonnet

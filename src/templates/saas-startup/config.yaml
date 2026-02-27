@@ -1,0 +1,38 @@
+company:
+  name: "MyStartup"
+  template: "saas-startup"
+
+agents:
+  ceo:
+    enabled: true
+    model: opus
+    check_in_interval: "4h"
+  cto:
+    enabled: true
+    model: opus
+    workers:
+      - backend-engineer:
+          model: sonnet
+      - frontend-engineer:
+          model: sonnet
+  cfo:
+    enabled: true
+    model: sonnet
+    workers:
+      - financial-analyst:
+          model: sonnet
+  cmo:
+    enabled: true
+    model: sonnet
+    workers:
+      - content-writer:
+          model: sonnet
+
+persona:
+  preset: professional
+
+settings:
+  cost_limit_daily: 50
+  cost_limit_monthly: 500
+  escalation_threshold: "high"
+  auto_start_workers: true

@@ -1,0 +1,12 @@
+name: consulting-firm
+display_name: Consulting Firm
+description: "Engagements, deliverables, expertise scaling"
+recommended_structure: full-c-suite
+recommended_preset: professional
+industry_knowledge:
+  - Engagement management and delivery
+  - Utilization rate optimization
+  - Proposal and SOW writing
+  - Client advisory and strategic recommendations
+  - Knowledge management and methodology
+  - Partner/associate development pipeline

@@ -1,0 +1,12 @@
+name: e-commerce
+display_name: E-Commerce
+description: "Catalog management, fulfillment, conversion optimization"
+recommended_structure: full-c-suite
+recommended_preset: startup
+industry_knowledge:
+  - Product catalog management and merchandising
+  - Order fulfillment and logistics
+  - Conversion rate optimization (CRO)
+  - Customer acquisition and retention
+  - Inventory management and forecasting
+  - Payment processing and fraud prevention

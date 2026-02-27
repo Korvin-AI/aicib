@@ -1,0 +1,64 @@
+{
+  "name": "aicib",
+  "version": "0.1.0",
+  "description": "AI Company-in-a-Box — spawn a hierarchical team of AI agents structured like a real company",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "aicib": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "test": "echo 'Integration tests require Claude Code subscription. See tests/ directory.' && exit 0",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "multi-agent",
+    "company",
+    "automation",
+    "claude",
+    "llm",
+    "cli"
+  ],
+  "author": "Oleksii Hrankin",
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Korvin-AI/aicib.git"
+  },
+  "homepage": "https://github.com/Korvin-AI/aicib#readme",
+  "bugs": {
+    "url": "https://github.com/Korvin-AI/aicib/issues"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.39",
+    "@slack/bolt": "^4.1.0",
+    "@slack/web-api": "^7.8.0",
+    "better-sqlite3": "^11.7.0",
+    "chalk": "^5.4.1",
+    "cli-table3": "^0.6.5",
+    "commander": "^13.1.0",
+    "cron-parser": "^4.9.0",
+    "inquirer": "^12.3.2",
+    "js-yaml": "^4.1.0",
+    "ora": "^8.1.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.12.0",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "dist",
+    "src/templates"
+  ]
+}

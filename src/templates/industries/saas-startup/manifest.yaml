@@ -1,0 +1,12 @@
+name: saas-startup
+display_name: SaaS Startup
+description: "Recurring revenue, product-led growth, dev tools"
+recommended_structure: full-c-suite
+recommended_preset: professional
+industry_knowledge:
+  - Recurring revenue and subscription models
+  - Product-led growth (PLG) strategy
+  - Developer tools and API-first design
+  - SaaS metrics (MRR, ARR, churn, NRR)
+  - Freemium and trial conversion
+  - Customer success and onboarding

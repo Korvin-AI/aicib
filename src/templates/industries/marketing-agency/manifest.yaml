@@ -1,0 +1,12 @@
+name: marketing-agency
+display_name: Marketing Agency
+description: "Client portfolios, campaigns, creative production"
+recommended_structure: lean-startup
+recommended_preset: creative
+industry_knowledge:
+  - Client account management and retention
+  - Campaign planning and execution
+  - Creative brief development
+  - Media buying and placement
+  - Brand strategy and positioning
+  - Agency billing models (retainer, project, performance)

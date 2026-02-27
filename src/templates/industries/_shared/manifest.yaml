@@ -1,0 +1,7 @@
+name: _shared
+display_name: Shared Defaults
+description: "Generic fallback agents for roles not covered by a specific industry"
+industry_knowledge:
+  - General business operations
+  - Cross-functional collaboration
+  - Strategic planning and execution

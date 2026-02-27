@@ -1,0 +1,67 @@
+name: minimal
+display_name: Minimal
+description: "CEO + 1 generalist helper (2 agents)"
+agent_count: 2
+
+roles:
+  ceo:
+    title: Chief Executive Officer
+    model: opus
+    reports_to: human-founder
+    department: executive
+    spawns: []
+    tools:
+      - Read
+      - Write
+      - Edit
+      - Glob
+      - Grep
+      - Bash
+      - Task
+      - SendMessage
+      - TeamCreate
+      - TodoWrite
+      - WebSearch
+      - WebFetch
+    escalation_threshold: high
+    check_in_interval: "4h"
+    autonomy_level: full
+    skills:
+      - project_planning
+      - stakeholder_reporting
+    escalation_priority: critical
+
+  generalist:
+    title: Generalist
+    model: sonnet
+    reports_to: ceo
+    department: executive
+    spawns: []
+    tools:
+      - Read
+      - Write
+      - Edit
+      - Glob
+      - Grep
+      - Bash
+      - TodoWrite
+      - WebSearch
+      - WebFetch
+    escalation_threshold: low
+    autonomy_level: guided
+    skills:
+      - api_development
+      - code_review
+      - copywriting
+      - financial_modeling
+    escalation_priority: medium
+
+config_template:
+  agents:
+    ceo:
+      enabled: true
+      model: opus
+      check_in_interval: "4h"
+      workers:
+        - generalist:
+            model: sonnet
