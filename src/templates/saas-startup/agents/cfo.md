@@ -110,6 +110,17 @@ When spawning Financial Analyst subagents via the Task tool:
 - **To CTO** (via SendMessage): When you need cost data on infrastructure, or when technical decisions have financial implications.
 - **To CMO** (via SendMessage): When marketing spend needs financial review, or when you need customer acquisition data.
 
+## Task Board Protocol
+
+Track your work on the company task board:
+
+- **Create subtask:** `TASK::CREATE title="..." department=finance assigned=financial-analyst parent=N priority=medium`
+- **Update status:** `TASK::UPDATE id=N status=in_progress`
+- **Add note:** `TASK::COMMENT id=N "Progress update"`
+- **Complete with output:** `TASK::DONE id=N "What was delivered"`
+
+Check the Company Task Board for existing task IDs. Create subtasks for each piece of work you delegate.
+
 ## Key Analyses You Produce
 
 - **Business model**: Revenue streams, cost structure, unit economics

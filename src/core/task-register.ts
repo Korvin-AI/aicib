@@ -120,6 +120,7 @@ registerTable({
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     completed_at TEXT,
+    output_summary TEXT,
     FOREIGN KEY (parent_id) REFERENCES tasks(id) ON DELETE SET NULL
   )`,
   indexes: [
@@ -228,13 +229,16 @@ function flushPendingUpdates(): void {
       try {
         switch (update.type) {
           case "create": {
-            const { title, department, assigned, priority } = update.data;
+            const { title, department, assigned, priority, parent_id, description, status } = update.data;
             if (!title?.trim()) break;
             tm.createTask({
               title,
+              description: description || undefined,
               department: department || undefined,
               assignee: assigned || undefined,
               priority: (priority as TaskPriority) || "medium",
+              parent_id: parent_id ? parseInt(parent_id, 10) : undefined,
+              status: (status as TaskStatus) || undefined,
               created_by: "ceo",
             });
             break;
@@ -251,6 +255,9 @@ function flushPendingUpdates(): void {
             }
             if (update.data.priority && VALID_PRIORITIES.includes(update.data.priority as TaskPriority)) {
               fields.priority = update.data.priority;
+            }
+            if (update.data.output_summary) {
+              fields.output_summary = update.data.output_summary;
             }
             if (Object.keys(fields).length > 0) {
               tm.updateTask(id, fields);
@@ -301,22 +308,53 @@ registerMessageHandler("task-actions", (msg, config) => {
   // Parse structured TASK:: markers
   // TASK::CREATE uses order-independent key=value pairs after the required title.
   const createMatches = text.matchAll(
-    /TASK::CREATE\s+title="([^"]+)"((?:\s+(?:department|assigned|priority)=\S+)*)/g
+    /TASK::CREATE\s+title="([^"]+)"((?:\s+(?:department|assigned|priority|parent|description)=(?:"[^"]*"|\S+))*)/g
   );
   for (const match of createMatches) {
     const rest = match[2] || "";
     const deptMatch = rest.match(/department=(\S+)/);
     const assignMatch = rest.match(/assigned=([\w-]+)/);
     const prioMatch = rest.match(/priority=(critical|high|medium|low)/);
+    const parentMatch = rest.match(/parent=(\d+)/);
+    const descMatch = rest.match(/description="([^"]+)"/);
+
+    // Dedup: skip if delegation tracker already created a task for this assignee
+    const assignee = assignMatch?.[1] || "";
+    if (assignee) {
+      const delegationTs = recentDelegationCreates.get(assignee.toLowerCase());
+      if (delegationTs && Date.now() - delegationTs < 10_000) {
+        continue;
+      }
+    }
+
+    const descRaw = descMatch?.[1] || "";
+    const descCapped = descRaw.length > 1000 ? descRaw.slice(0, 997) + "..." : descRaw;
     queueUpdate(
       {
         type: "create",
         data: {
           title: match[1],
           department: deptMatch?.[1] || "",
-          assigned: assignMatch?.[1] || "",
+          assigned: assignee,
           priority: prioMatch?.[1] || "medium",
+          parent_id: parentMatch?.[1] || "",
+          description: descCapped,
         },
+      },
+      lastProjectDir
+    );
+  }
+
+  // TASK::DONE — complete a task with an output summary
+  const doneMatches = text.matchAll(
+    /TASK::DONE\s+id=(\d+)\s+"([^"]+)"/g
+  );
+  for (const match of doneMatches) {
+    const summary = match[2].length > 2000 ? match[2].slice(0, 1997) + "..." : match[2];
+    queueUpdate(
+      {
+        type: "update",
+        data: { id: match[1], status: "done", output_summary: summary },
       },
       lastProjectDir
     );
@@ -387,5 +425,186 @@ registerMessageHandler("task-actions", (msg, config) => {
       },
       lastProjectDir
     );
+  }
+});
+
+// --- Task delegation tracker ---
+// Intercepts SDK task_notification system messages to auto-create/complete tasks
+// when the CEO delegates to subagents via the Task tool.
+// Routes writes through queueUpdate() to share the debounced DB connection.
+
+// Track agent -> delegations for status updates and dedup (array supports concurrent delegations)
+const agentTaskMap = new Map<string, Array<{ taskId: number; createdAt: number }>>();
+
+// Track recent delegation-tracker creates for cross-handler dedup
+const recentDelegationCreates = new Map<string, number>(); // assignee -> timestamp
+
+// Track pending Task tool_use delegations: tool_use_id -> { agentName, description, timestamp }
+const pendingDelegations = new Map<string, { agentName: string; description: string; timestamp: number }>();
+
+// Agent role -> department mapping
+const AGENT_DEPARTMENT: Record<string, string> = {
+  ceo: "executive",
+  cto: "engineering",
+  cfo: "finance",
+  cmo: "marketing",
+  "backend-engineer": "engineering",
+  "frontend-engineer": "engineering",
+  "financial-analyst": "finance",
+  "content-writer": "marketing",
+};
+
+// Max entries before pruning stale pendingDelegations (TTL: 120s)
+const PENDING_DELEGATION_TTL_MS = 120_000;
+const PENDING_DELEGATION_MAX = 50;
+
+function pruneStaleDelegations(): void {
+  const now = Date.now();
+  for (const [id, entry] of pendingDelegations) {
+    if (now - entry.timestamp > PENDING_DELEGATION_TTL_MS) {
+      pendingDelegations.delete(id);
+    }
+  }
+}
+
+registerMessageHandler("task-delegation-tracker", (msg, config) => {
+  const tasksConfig = config.extensions?.tasks as TasksConfig | undefined;
+  if (tasksConfig && !tasksConfig.enabled) return;
+  if (!lastProjectDir) return;
+
+  // Clear maps on session init to prevent cross-session leaks
+  if (msg.type === "system" && "subtype" in msg && (msg as { subtype?: string }).subtype === "init") {
+    agentTaskMap.clear();
+    pendingDelegations.clear();
+    recentDelegationCreates.clear();
+    return;
+  }
+
+  // Intercept Task tool_use blocks from assistant messages to capture delegation intent
+  if (msg.type === "assistant" && msg.message?.content) {
+    for (const block of msg.message.content) {
+      if (
+        typeof block === "object" &&
+        block !== null &&
+        "type" in block &&
+        (block as { type: string }).type === "tool_use" &&
+        "name" in block &&
+        (block as { name: string }).name === "Task" &&
+        "id" in block &&
+        "input" in block
+      ) {
+        const toolBlock = block as { id: string; input: Record<string, unknown> };
+        const agentName = (toolBlock.input.agent_name as string) || (toolBlock.input.agentName as string) || "";
+        const description = (toolBlock.input.description as string) || (toolBlock.input.prompt as string) || "";
+        if (agentName) {
+          pendingDelegations.set(toolBlock.id, {
+            agentName: agentName.toLowerCase(),
+            description,
+            timestamp: Date.now(),
+          });
+          pruneStaleDelegations();
+        }
+      }
+    }
+  }
+
+  // Intercept task_notification system messages
+  if (msg.type !== "system" || !("subtype" in msg)) return;
+  if ((msg as { subtype?: string }).subtype !== "task_notification") return;
+
+  const taskMsg = msg as {
+    taskName?: string;
+    taskStatus?: string;
+    agentName?: string;
+    tool_use_id?: string;
+  };
+
+  const agentName = (taskMsg.agentName || taskMsg.taskName || "").toLowerCase();
+  const taskStatus = taskMsg.taskStatus || "";
+
+  if (!agentName) return;
+
+  if (taskStatus === "started") {
+    // Dedup: check in-memory timestamp (avoids DB round-trip and timezone issues)
+    const entries = agentTaskMap.get(agentName) || [];
+    if (entries.length > 0 && Date.now() - entries[entries.length - 1].createdAt < 5_000) {
+      return; // Already tracked this agent recently
+    }
+
+    // Check if we have a pending delegation with a description
+    let title = `${agentName} delegation`;
+    let description = "";
+    if (taskMsg.tool_use_id && pendingDelegations.has(taskMsg.tool_use_id)) {
+      const delegation = pendingDelegations.get(taskMsg.tool_use_id)!;
+      if (delegation.description) {
+        title = delegation.description.length > 100
+          ? delegation.description.slice(0, 97) + "..."
+          : delegation.description;
+        description = delegation.description;
+      }
+      pendingDelegations.delete(taskMsg.tool_use_id);
+    }
+
+    // Route through queueUpdate to share the debounced DB connection
+    queueUpdate(
+      {
+        type: "create",
+        data: {
+          title,
+          description,
+          assigned: agentName,
+          department: AGENT_DEPARTMENT[agentName] || "",
+          priority: "medium",
+          status: "in_progress",
+        },
+      },
+      lastProjectDir
+    );
+
+    // Record for cross-handler dedup
+    recentDelegationCreates.set(agentName, Date.now());
+
+    // Store a placeholder task ID (will be resolved by next flush).
+    // We use -1 as a sentinel; on "completed" we look up by assignee if needed.
+    entries.push({ taskId: -1, createdAt: Date.now() });
+    agentTaskMap.set(agentName, entries);
+  } else if (taskStatus === "completed") {
+    const entries = agentTaskMap.get(agentName);
+    if (!entries || entries.length === 0) return;
+
+    // Pop the oldest delegation for this agent
+    const entry = entries.shift()!;
+    if (entries.length === 0) {
+      agentTaskMap.delete(agentName);
+    }
+
+    // Resolve the task ID: if -1 (not yet flushed), force a flush and look up
+    if (entry.taskId === -1) {
+      // Force flush so the task exists in DB
+      flushPendingUpdates();
+      // Look up the task by assignee
+      let tm: TaskManager | undefined;
+      try {
+        tm = new TaskManager(lastProjectDir);
+        const recent = tm.listTasks({ assignee: agentName, status: ["in_progress"] }, 1);
+        if (recent.length > 0) {
+          entry.taskId = recent[0].id;
+        }
+      } catch {
+        // ignore
+      } finally {
+        tm?.close();
+      }
+    }
+
+    if (entry.taskId > 0) {
+      queueUpdate(
+        {
+          type: "update",
+          data: { id: String(entry.taskId), status: "done" },
+        },
+        lastProjectDir
+      );
+    }
   }
 });

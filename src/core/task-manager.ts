@@ -71,6 +71,7 @@ export interface Task {
   created_at: string;
   updated_at: string;
   completed_at: string | null;
+  output_summary: string | null;
 }
 
 export interface TaskComment {
@@ -95,6 +96,7 @@ export interface CreateTaskInput {
   deadline?: string;
   created_by?: string;
   session_id?: string;
+  output_summary?: string;
 }
 
 export interface UpdateTaskInput {
@@ -108,6 +110,7 @@ export interface UpdateTaskInput {
   project?: string | null;
   parent_id?: number | null;
   deadline?: string | null;
+  output_summary?: string;
 }
 
 export interface TaskFilter {
@@ -209,8 +212,11 @@ export class TaskManager {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       completed_at TEXT,
+      output_summary TEXT,
       FOREIGN KEY (parent_id) REFERENCES tasks(id) ON DELETE SET NULL
     )`).run();
+    // Migration: add output_summary column to existing databases
+    try { this.db.prepare("ALTER TABLE tasks ADD COLUMN output_summary TEXT").run(); } catch { /* column already exists */ }
     this.db.prepare(`CREATE TABLE IF NOT EXISTS task_blockers (
       task_id INTEGER NOT NULL,
       blocker_id INTEGER NOT NULL,
@@ -244,8 +250,8 @@ export class TaskManager {
   createTask(input: CreateTaskInput): Task {
     const result = this.db
       .prepare(
-        `INSERT INTO tasks (title, description, status, priority, assignee, reviewer, department, project, parent_id, deadline, created_by, session_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO tasks (title, description, status, priority, assignee, reviewer, department, project, parent_id, deadline, created_by, session_id, output_summary)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         input.title,
@@ -259,7 +265,8 @@ export class TaskManager {
         input.parent_id ?? null,
         input.deadline ?? null,
         input.created_by || "human-founder",
-        input.session_id ?? null
+        input.session_id ?? null,
+        input.output_summary ?? null
       );
 
     const task = this.getTask(Number(result.lastInsertRowid));
@@ -295,7 +302,7 @@ export class TaskManager {
 
     const ALLOWED_COLUMNS = new Set([
       "title", "description", "status", "priority", "assignee", "reviewer",
-      "department", "project", "parent_id", "deadline",
+      "department", "project", "parent_id", "deadline", "output_summary",
     ]);
 
     for (const [key, value] of Object.entries(fields)) {

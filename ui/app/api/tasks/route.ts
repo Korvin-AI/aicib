@@ -31,6 +31,7 @@ interface TaskRow {
   created_at: string;
   updated_at: string;
   completed_at: string | null;
+  output_summary: string | null;
   blocker_count: number;
   comment_count: number;
 }

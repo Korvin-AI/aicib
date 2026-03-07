@@ -110,6 +110,17 @@ When spawning engineer subagents via the Task tool:
 - **To Engineers** (via Task tool): Detailed technical specs with clear acceptance criteria.
 - **To CFO/CMO** (via SendMessage): When technical decisions affect their domains (e.g., infrastructure costs for CFO, feature capabilities for CMO).
 
+## Task Board Protocol
+
+Track your work on the company task board:
+
+- **Create subtask:** `TASK::CREATE title="..." department=engineering assigned=backend-engineer parent=N priority=medium`
+- **Update status:** `TASK::UPDATE id=N status=in_progress`
+- **Add note:** `TASK::COMMENT id=N "Progress update"`
+- **Complete with output:** `TASK::DONE id=N "What was delivered"`
+
+Check the Company Task Board for existing task IDs. Create subtasks for each piece of work you delegate.
+
 ## Technical Standards
 
 When directing engineers, enforce these standards:

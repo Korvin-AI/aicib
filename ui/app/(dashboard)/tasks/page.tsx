@@ -2,7 +2,8 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { AlertTriangle, MessageSquare } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ExternalLink, GitBranch, MessageSquare } from "lucide-react";
+import Link from "next/link";
 import {
   Sheet,
   SheetContent,
@@ -27,10 +28,12 @@ interface Task {
   reviewer: string | null;
   department: string | null;
   project: string | null;
+  parent_id: number | null;
   deadline: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
+  output_summary: string | null;
   blocker_count: number;
   comment_count: number;
 }
@@ -339,6 +342,13 @@ function TasksPageContent() {
                         </div>
 
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+                          {task.parent_id ? (
+                            <span className="inline-flex items-center gap-0.5 text-blue-600">
+                              <GitBranch className="h-3 w-3" />
+                              #{task.parent_id}
+                            </span>
+                          ) : null}
+
                           {task.department ? <span>{task.department}</span> : null}
 
                           {task.blocker_count > 0 ? (
@@ -368,7 +378,18 @@ function TasksPageContent() {
       <Sheet open={!!selectedTaskId} onOpenChange={(open) => !open && setSelectedTaskId(null)}>
         <SheetContent side="right" className="overflow-y-auto sm:max-w-lg">
           <SheetHeader>
-            <SheetTitle className="text-base">Task Details</SheetTitle>
+            <div className="flex items-center justify-between">
+              <SheetTitle className="text-base">Task Details</SheetTitle>
+              {selectedTaskId ? (
+                <Link
+                  href={`/tasks/${selectedTaskId}`}
+                  className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  Full page
+                </Link>
+              ) : null}
+            </div>
             <SheetDescription className="text-[12px]">
               Read-only web view. Use CLI or brief for changes.
             </SheetDescription>
@@ -380,6 +401,16 @@ function TasksPageContent() {
             <div className="px-4 py-3 text-[13px] text-muted-foreground">Task details not available.</div>
           ) : (
             <div className="space-y-4 px-4 pb-5">
+              {taskDetail.task.parent_id ? (
+                <button
+                  onClick={() => setSelectedTaskId(taskDetail.task.parent_id!)}
+                  className="inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-1 text-[12px] text-blue-700 transition-colors hover:bg-blue-100"
+                >
+                  <GitBranch className="h-3 w-3" />
+                  Parent task #{taskDetail.task.parent_id}
+                </button>
+              ) : null}
+
               <div>
                 <h3 className="text-[15px] font-semibold leading-tight text-foreground">
                   {taskDetail.task.title}
@@ -388,6 +419,15 @@ function TasksPageContent() {
                   {taskDetail.task.description || "No description"}
                 </p>
               </div>
+
+              {taskDetail.task.output_summary ? (
+                <div className="rounded-md border border-green-200 bg-green-50 px-3 py-2">
+                  <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-wide text-green-700">
+                    {taskDetail.task.status === "done" ? "Output" : "Previous Output"}
+                  </p>
+                  <p className="text-[12px] leading-relaxed text-green-800">{taskDetail.task.output_summary}</p>
+                </div>
+              ) : null}
 
               <div className="grid grid-cols-2 gap-2 text-[12px]">
                 <div className="rounded border border-border/70 bg-muted/20 px-2 py-1.5">
@@ -431,6 +471,50 @@ function TasksPageContent() {
                   </div>
                 )}
               </div>
+
+              {taskDetail.subtasks.length > 0 ? (
+                <div>
+                  <p className="mb-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Subtasks ({taskDetail.subtasks.length})
+                  </p>
+                  <div className="space-y-1">
+                    {taskDetail.subtasks.map((subtask) => {
+                      const subtaskColor = subtask.assignee ? getAgentColorClasses(subtask.assignee) : null;
+                      return (
+                        <button
+                          key={subtask.id}
+                          onClick={() => setSelectedTaskId(subtask.id)}
+                          className="flex w-full items-center gap-2 rounded border border-border/70 px-2 py-1.5 text-left text-[12px] transition-colors hover:bg-muted/30"
+                        >
+                          {subtask.status === "done" ? (
+                            <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-500" />
+                          ) : (
+                            <div className="h-3.5 w-3.5 shrink-0 rounded-full border-2 border-muted-foreground/30" />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate font-medium text-foreground">#{subtask.id} {subtask.title}</p>
+                            <div className="mt-0.5 flex items-center gap-1.5">
+                              <Badge
+                                variant="outline"
+                                className={cn("text-[9px] capitalize", priorityClasses[subtask.priority as Task["priority"]])}
+                              >
+                                {subtask.priority}
+                              </Badge>
+                              {subtask.assignee ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                                  <span className={cn("h-1.5 w-1.5 rounded-full", subtaskColor?.dot)} />
+                                  {subtask.assignee}
+                                </span>
+                              ) : null}
+                              <span className="capitalize text-muted-foreground">{subtask.status.replaceAll("_", " ")}</span>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
 
               <div>
                 <p className="mb-1 text-[11px] uppercase tracking-wide text-muted-foreground">Comments</p>

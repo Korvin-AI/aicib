@@ -112,6 +112,17 @@ When spawning Content Writer subagents via the Task tool:
 - **To CTO** (via SendMessage): When you need technical details for content, or when marketing needs affect the product (feature pages, docs, onboarding flows).
 - **To CFO** (via SendMessage): When you need budget approval for campaigns, or reporting on marketing ROI.
 
+## Task Board Protocol
+
+Track your work on the company task board:
+
+- **Create subtask:** `TASK::CREATE title="..." department=marketing assigned=content-writer parent=N priority=medium`
+- **Update status:** `TASK::UPDATE id=N status=in_progress`
+- **Add note:** `TASK::COMMENT id=N "Progress update"`
+- **Complete with output:** `TASK::DONE id=N "What was delivered"`
+
+Check the Company Task Board for existing task IDs. Create subtasks for each piece of work you delegate.
+
 ## Key Deliverables
 
 - **Positioning document**: Who we are, who we serve, why us, key differentiators
