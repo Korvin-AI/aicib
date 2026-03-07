@@ -429,8 +429,8 @@ registerMessageHandler("task-actions", (msg, config) => {
 });
 
 // --- Task delegation tracker ---
-// Intercepts SDK task_notification system messages to auto-create/complete tasks
-// when the CEO delegates to subagents via the Task tool.
+// Intercepts Task tool_use blocks from CEO assistant messages to auto-create tasks,
+// and tool_result / task_notification messages to auto-complete them.
 // Routes writes through queueUpdate() to share the debounced DB connection.
 
 // Track agent -> delegations for status updates and dedup (array supports concurrent delegations)
@@ -454,9 +454,8 @@ const AGENT_DEPARTMENT: Record<string, string> = {
   "content-writer": "marketing",
 };
 
-// Max entries before pruning stale pendingDelegations (TTL: 120s)
+// TTL for stale pendingDelegations entries (120s)
 const PENDING_DELEGATION_TTL_MS = 120_000;
-const PENDING_DELEGATION_MAX = 50;
 
 function pruneStaleDelegations(): void {
   const now = Date.now();
@@ -464,6 +463,60 @@ function pruneStaleDelegations(): void {
     if (now - entry.timestamp > PENDING_DELEGATION_TTL_MS) {
       pendingDelegations.delete(id);
     }
+  }
+}
+
+/**
+ * Resolve a pending delegation and mark its task as completed.
+ * Shared by tool_result and task_notification handlers.
+ */
+function completeDelegation(
+  agentName: string,
+  status: "done" | "cancelled",
+  outputSummary?: string
+): void {
+  if (!lastProjectDir) return;
+
+  const entries = agentTaskMap.get(agentName);
+  if (!entries || entries.length === 0) return;
+
+  const entry = entries.shift()!;
+  if (entries.length === 0) {
+    agentTaskMap.delete(agentName);
+  }
+
+  // Resolve the task ID: if -1 (not yet flushed), force a flush and look up
+  if (entry.taskId === -1) {
+    flushPendingUpdates();
+    let tm: TaskManager | undefined;
+    try {
+      tm = new TaskManager(lastProjectDir);
+      const recent = tm.listTasks({ assignee: agentName, status: ["in_progress"] }, 1);
+      if (recent.length > 0) {
+        entry.taskId = recent[0].id;
+      }
+    } catch {
+      // ignore
+    } finally {
+      tm?.close();
+    }
+  }
+
+  if (entry.taskId > 0) {
+    const summary = outputSummary
+      ? (outputSummary.length > 2000 ? outputSummary.slice(0, 1997) + "..." : outputSummary)
+      : "";
+    queueUpdate(
+      {
+        type: "update",
+        data: {
+          id: String(entry.taskId),
+          status,
+          ...(summary ? { output_summary: summary } : {}),
+        },
+      },
+      lastProjectDir
+    );
   }
 }
 
@@ -501,7 +554,8 @@ registerMessageHandler("task-delegation-tracker", (msg, config) => {
           || (toolBlock.input.agent_name as string)
           || (toolBlock.input.agentName as string)
           || "";
-        const description = (toolBlock.input.description as string) || "";
+        const descRaw = (toolBlock.input.description as string) || "";
+        const description = descRaw.length > 1000 ? descRaw.slice(0, 997) + "..." : descRaw;
         if (!agentName) continue;
 
         const normalizedAgent = agentName.toLowerCase();
@@ -562,53 +616,19 @@ registerMessageHandler("task-delegation-tracker", (msg, config) => {
         (block as { type: string }).type === "tool_result" &&
         "tool_use_id" in block
       ) {
-        const resultBlock = block as { tool_use_id: string; content?: unknown };
+        const resultBlock = block as { tool_use_id: string; is_error?: boolean; content?: unknown };
         const delegation = pendingDelegations.get(resultBlock.tool_use_id);
         if (!delegation) continue;
 
-        const agentName = delegation.agentName;
         pendingDelegations.delete(resultBlock.tool_use_id);
-
-        const entries = agentTaskMap.get(agentName);
-        if (!entries || entries.length === 0) continue;
-
-        // Pop the oldest delegation for this agent
-        const entry = entries.shift()!;
-        if (entries.length === 0) {
-          agentTaskMap.delete(agentName);
-        }
-
-        // Resolve the task ID: if -1 (not yet flushed), force a flush and look up
-        if (entry.taskId === -1) {
-          flushPendingUpdates();
-          let tm: TaskManager | undefined;
-          try {
-            tm = new TaskManager(lastProjectDir);
-            const recent = tm.listTasks({ assignee: agentName, status: ["in_progress"] }, 1);
-            if (recent.length > 0) {
-              entry.taskId = recent[0].id;
-            }
-          } catch {
-            // ignore
-          } finally {
-            tm?.close();
-          }
-        }
-
-        if (entry.taskId > 0) {
-          queueUpdate(
-            {
-              type: "update",
-              data: { id: String(entry.taskId), status: "done" },
-            },
-            lastProjectDir
-          );
-        }
+        const completionStatus = resultBlock.is_error ? "cancelled" : "done";
+        completeDelegation(delegation.agentName, completionStatus);
       }
     }
   }
 
-  // 3. Also handle task_notification system messages (SDK v0.2.42+ may send these)
+  // 3. Handle task_notification system messages (kept for forward compatibility
+  //    with future SDK versions that may emit these).
   if (
     msg.type === "system" &&
     "subtype" in msg &&
@@ -621,49 +641,8 @@ registerMessageHandler("task-delegation-tracker", (msg, config) => {
     const delegation = taskMsg.task_id ? pendingDelegations.get(taskMsg.task_id) : undefined;
     if (!delegation) return;
 
-    const agentName = delegation.agentName;
     pendingDelegations.delete(taskMsg.task_id!);
-
-    const entries = agentTaskMap.get(agentName);
-    if (!entries || entries.length === 0) return;
-
-    const entry = entries.shift()!;
-    if (entries.length === 0) {
-      agentTaskMap.delete(agentName);
-    }
-
-    if (entry.taskId === -1) {
-      flushPendingUpdates();
-      let tm: TaskManager | undefined;
-      try {
-        tm = new TaskManager(lastProjectDir);
-        const recent = tm.listTasks({ assignee: agentName, status: ["in_progress"] }, 1);
-        if (recent.length > 0) {
-          entry.taskId = recent[0].id;
-        }
-      } catch {
-        // ignore
-      } finally {
-        tm?.close();
-      }
-    }
-
-    if (entry.taskId > 0) {
-      const completionStatus = taskStatus === "completed" ? "done" : "cancelled";
-      const summary = taskMsg.summary
-        ? (taskMsg.summary.length > 2000 ? taskMsg.summary.slice(0, 1997) + "..." : taskMsg.summary)
-        : "";
-      queueUpdate(
-        {
-          type: "update",
-          data: {
-            id: String(entry.taskId),
-            status: completionStatus,
-            ...(summary ? { output_summary: summary } : {}),
-          },
-        },
-        lastProjectDir
-      );
-    }
+    const completionStatus = taskStatus === "completed" ? "done" as const : "cancelled" as const;
+    completeDelegation(delegation.agentName, completionStatus, taskMsg.summary);
   }
 });

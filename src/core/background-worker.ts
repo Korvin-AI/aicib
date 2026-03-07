@@ -33,7 +33,7 @@ import "./events-register.js";
 import { loadConfig } from "./config.js";
 import type { AicibConfig } from "./config.js";
 import { CostTracker } from "./cost-tracker.js";
-import type { EngineMessage, EngineSystemMessage } from "./engine/index.js";
+import type { EngineMessage } from "./engine/index.js";
 import { getEngine } from "./engine/index.js";
 import { sendBrief, recordRunCosts, generateJournalEntry, formatMessagePlain } from "./agent-runner.js";
 import { ProjectPlanner, type ProjectConfig, PROJECT_CONFIG_DEFAULTS } from "./project-planner.js";
@@ -48,28 +48,46 @@ process.on("SIGTERM", () => {
 });
 
 /**
- * Track sub-agent status from task_notification messages.
- * Extracted to avoid duplication between runSingleBrief and runProjectLoop.
+ * Track sub-agent status from Task tool_use and tool_result messages.
+ * Sets agent to "working" on delegation, "idle" on completion.
  */
+// Local map: tool_use_id -> agent name (for resolving completions)
+const activeSubagents = new Map<string, string>();
+
 function trackSubagentStatus(msg: EngineMessage, costTracker: CostTracker): void {
-  if (
-    msg.type === "system" &&
-    "subtype" in msg &&
-    ((msg as EngineSystemMessage).subtype as string) === "task_notification"
-  ) {
-    // SDK sends: { task_id: string, status: 'completed'|'failed'|'stopped', summary: string }
-    // task_notification only fires on completion — set agent to idle.
-    // Note: task_id is the tool_use_id, not the agent name. We can't resolve
-    // agent name here, so we mark all as idle (correct since these are completions).
-    const taskMsg = msg as EngineSystemMessage & {
-      task_id?: string;
-      status?: string;
-    };
-    const status = taskMsg.status || "";
-    if (status === "completed" || status === "failed" || status === "stopped") {
-      // Agent name not available from task_id alone — status will correct
-      // on the next brief cycle. This is a known limitation.
-      void costTracker;
+  // Detect Task delegation in assistant messages → mark agent as working
+  if (msg.type === "assistant" && msg.message?.content) {
+    for (const block of msg.message.content) {
+      if (
+        typeof block === "object" && block !== null &&
+        "type" in block && (block as { type: string }).type === "tool_use" &&
+        "name" in block && (block as { name: string }).name === "Task" &&
+        "id" in block && "input" in block
+      ) {
+        const tb = block as { id: string; input: Record<string, unknown> };
+        const agent = ((tb.input.subagent_type as string) || (tb.input.agent_name as string) || "").toLowerCase();
+        if (agent) {
+          activeSubagents.set(tb.id, agent);
+          costTracker.setAgentStatus(agent, "working");
+        }
+      }
+    }
+  }
+
+  // Detect Task tool_result in user messages → mark agent as idle
+  if (msg.type === "user" && msg.message?.content) {
+    for (const block of msg.message.content) {
+      if (
+        typeof block === "object" && block !== null &&
+        "type" in block && (block as { type: string }).type === "tool_result" &&
+        "tool_use_id" in block
+      ) {
+        const agent = activeSubagents.get((block as { tool_use_id: string }).tool_use_id);
+        if (agent) {
+          activeSubagents.delete((block as { tool_use_id: string }).tool_use_id);
+          costTracker.setAgentStatus(agent, "idle");
+        }
+      }
     }
   }
 }
