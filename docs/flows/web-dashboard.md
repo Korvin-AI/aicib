@@ -119,6 +119,37 @@ The green/red dot in the top bar shows SSE connection status. If it goes red, th
 - **Dashboard shows everything as stopped/inactive** — Either click "Start Company" on the dashboard, or run `aicib start` in another terminal.
 - **SSE disconnects frequently** — Normal if the database is locked during heavy agent work. Reconnects automatically.
 
+## Deleting a Business
+
+You can remove a business from the dropdown in the sidebar.
+
+### How It Works
+
+1. Click the business switcher dropdown (top-left of sidebar)
+2. Click the trash icon next to the business you want to remove
+3. A confirmation dialog appears showing the business name and folder path
+4. Choose one of two options:
+   - **"Remove from List"** (default) — removes the business from your list only. The project folder stays on disk. You can re-import it later via "Import Existing Business."
+   - **"Delete Everything"** — check the "Also delete the project folder and all data" checkbox first. This permanently deletes the folder and all files inside it. A red warning reminds you this can't be undone.
+5. The page reloads automatically after deletion
+
+### What Happens in Each Scenario
+
+- **Deleting a business that's not currently active** — it disappears from the list, everything else stays the same
+- **Deleting the currently active business** — the system auto-selects the next business in your list
+- **Deleting the last remaining business** — the page redirects to the setup wizard so you can create a new one
+- **Business has a running session** — the session is automatically stopped before deletion
+
+### Safety Precautions (folder deletion)
+
+When you check "Also delete the project folder," three safety checks run before anything is deleted:
+
+1. The folder must contain an `aicib.config.yaml` file (proof it's an AICIB project)
+2. The path must be at least 2 levels deep (blocks deleting `/` or `/tmp`)
+3. The path cannot be your home directory
+
+If any check fails, the delete is refused and the folder is untouched.
+
 ## CLI and Dashboard Together
 
 The terminal and dashboard are two views into the same data:

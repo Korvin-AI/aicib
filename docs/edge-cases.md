@@ -1204,3 +1204,47 @@ Track edge cases discovered during implementation.
 **Scenario:** Event created without `cron_expression` — exists in DB but has no schedule.
 **Handling:** No schedule is created (guarded by `if (!event.cron_expression)`). Event can be triggered manually via CLI or agent markers.
 **User sees:** Event appears in list but has no `next_run_at` date.
+
+## Business Delete
+
+### Delete — Folder Deletion Safety Guard
+
+**Scenario:** Registry entry points to a dangerous path (e.g., `/`, home directory, or a non-AICIB folder).
+**Handling:** `isSafeToDelete()` checks: path >= 2 segments, not home dir, must contain `aicib.config.yaml`. Fails fast with 400 error if any check fails.
+**User sees:** Error: "Refusing to delete: path failed safety check."
+
+### Delete — Active Session Running
+
+**Scenario:** User deletes a business that has an active agent session.
+**Handling:** `stopBusinessSync()` is called first (retries up to 5 times). If stop fails, deletion is aborted entirely.
+**User sees:** Error: "Cannot delete: failed to stop running session."
+
+### Delete — File Deletion Fails (Permissions)
+
+**Scenario:** `fs.rmSync()` throws (e.g., permission denied, file locked).
+**Handling:** API returns 500 error. Registry entry is NOT removed (files deleted before registry update). User can retry.
+**User sees:** Error: "Failed to delete project folder: [OS error message]."
+
+### Delete — Deleting the Active Business
+
+**Scenario:** User deletes the business they're currently viewing.
+**Handling:** `removeBusiness()` auto-selects the first remaining business as active. Page reloads and picks up the new active business.
+**User sees:** Page reloads showing the next business in their list.
+
+### Delete — Deleting the Last Business
+
+**Scenario:** User deletes their only remaining business.
+**Handling:** Registry has `activeBusinessId: null` and empty `businesses` array. On reload, `BusinessBootstrapGuard` detects no businesses and redirects to `/businesses/new`.
+**User sees:** Redirected to setup wizard.
+
+### Delete — Double Delete (Race Condition)
+
+**Scenario:** Two rapid delete requests for the same business (e.g., double-click).
+**Handling:** First request succeeds. Second request gets 404 from `getBusinessById()` since the entry was already removed.
+**User sees:** First click works; second is silently ignored (page already reloading).
+
+### Delete — Radix onSelect Fires on Trash Icon Click
+
+**Scenario:** Clicking the trash icon inside a `DropdownMenuItem` could trigger both the business-switch `onSelect` and the delete dialog.
+**Handling:** Trash button has `data-delete-btn` attribute. The `onSelect` handler checks `e.target.closest("[data-delete-btn]")` and calls `e.preventDefault()` to suppress the switch.
+**User sees:** Delete dialog opens; business does not switch.

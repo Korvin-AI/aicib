@@ -9,6 +9,7 @@ import {
   Loader2,
   Plus,
   FolderPlus,
+  Trash2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -19,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { BusinessImportDialog } from "@/components/business-import-dialog";
+import { BusinessDeleteDialog } from "@/components/business-delete-dialog";
 
 interface BusinessListItem {
   id: string;
@@ -40,6 +42,11 @@ export function BusinessSwitcher() {
   const [loading, setLoading] = useState(true);
   const [switchingId, setSwitchingId] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string;
+    name: string;
+    projectDir: string;
+  } | null>(null);
 
   async function loadBusinesses() {
     setLoading(true);
@@ -114,7 +121,13 @@ export function BusinessSwitcher() {
               return (
                 <DropdownMenuItem
                   key={business.id}
-                  onSelect={() => handleSelect(business.id)}
+                  onSelect={(e) => {
+                    if ((e.target as Element).closest?.("[data-delete-btn]")) {
+                      e.preventDefault();
+                      return;
+                    }
+                    handleSelect(business.id);
+                  }}
                   className="flex items-start gap-2"
                 >
                   <div
@@ -129,6 +142,22 @@ export function BusinessSwitcher() {
                     </p>
                   </div>
                   {active ? <Check className="h-3.5 w-3.5 text-foreground" /> : null}
+                  <button
+                    data-delete-btn
+                    type="button"
+                    className="ml-1 rounded p-0.5 text-muted-foreground/50 hover:bg-destructive/10 hover:text-destructive"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setDeleteTarget({
+                        id: business.id,
+                        name: business.name,
+                        projectDir: business.projectDir,
+                      });
+                    }}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
                 </DropdownMenuItem>
               );
             })
@@ -155,6 +184,15 @@ export function BusinessSwitcher() {
         open={importOpen}
         onOpenChange={setImportOpen}
         onImported={() => window.location.reload()}
+      />
+
+      <BusinessDeleteDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        business={deleteTarget}
+        onDeleted={() => window.location.reload()}
       />
     </>
   );

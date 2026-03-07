@@ -127,6 +127,52 @@ The setup wizard provides a browser-based first-run experience. When a user open
 - Fixed YAML agents section regex — `\s{2}\S` only matched 2-space lines, skipping all agent properties (model, enabled). Changed to `[ ]{2,}` to capture 2+-space lines. Without this fix, every agent showed "sonnet" regardless of config.
 - Simplified Team Builder step — removed enable/disable toggles, model-only selection. Price shown next to dropdown (always visible) and inside dropdown options.
 
+### Business Registry (`lib/business-registry.ts`)
+
+Multi-business management. Reads/writes `~/.aicib/businesses.json`.
+
+Key functions:
+- `readBusinessRegistry()` / `writeBusinessRegistry()` — read/write with coercion and deduplication
+- `upsertBusiness()` — add or update a business entry
+- `removeBusiness(businessId)` — removes entry from registry. If the deleted business was active, auto-selects the first remaining business. Returns `{ removed, newActiveId }`.
+- `setActiveBusiness()` — switch active business
+- `getBusinessById()` / `listBusinesses()` — lookups
+
+### Business Delete (`app/api/businesses/delete/route.ts`)
+
+`POST /api/businesses/delete` — removes a business, optionally deletes its project folder.
+
+Request: `{ businessId: string, deleteFiles?: boolean }`
+
+Flow:
+1. Validate `businessId`, look up via `getBusinessById()`
+2. If session is running → auto-stop via `stopBusinessSync()`
+3. If `deleteFiles: true` → run `isSafeToDelete()` guard, then `fs.rmSync()`
+4. Only after file deletion succeeds → call `removeBusiness()` to update registry
+5. Return `{ success, registryRemoved, filesDeleted, filesError, newActiveId }`
+
+**Order matters:** Files are deleted before the registry entry is removed. If `rmSync` fails, the registry stays intact so the user can retry.
+
+**`isSafeToDelete()` guard** (3 checks):
+- Path must have >= 2 segments (blocks `/` and `/tmp`)
+- Path must not equal `os.homedir()`
+- Path must contain `aicib.config.yaml`
+
+### Business Delete Dialog (`components/business-delete-dialog.tsx`)
+
+Confirmation dialog for business deletion. Props: `open`, `onOpenChange`, `business`, `onDeleted`.
+
+- Checkbox "Also delete the project folder" is OFF by default
+- When checked, shows red warning and changes button to "Delete Everything"
+- State (checkbox, error) resets via `useEffect` when `business?.id` or `open` changes
+
+### Business Switcher (`components/business-switcher.tsx`)
+
+Dropdown with business list, create/import/delete actions.
+
+- Each business row has a `Trash2` icon button with `data-delete-btn` attribute
+- The `onSelect` handler on `DropdownMenuItem` checks `e.target.closest("[data-delete-btn]")` to prevent Radix UI from firing the business-switch callback when the trash icon is clicked
+
 ### CLI Command (`src/cli/ui-launcher.ts`)
 
 The `aicib ui` command:

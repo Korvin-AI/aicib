@@ -333,3 +333,32 @@ export function upsertBusiness(input: {
 
   return result;
 }
+
+export function removeBusiness(businessId: string): {
+  removed: BusinessRegistryEntry | null;
+  newActiveId: string | null;
+} {
+  const registry = readBusinessRegistry();
+  const normalizedId = businessId.trim();
+  const index = registry.businesses.findIndex((b) => b.id === normalizedId);
+
+  if (index < 0) {
+    return { removed: null, newActiveId: registry.activeBusinessId };
+  }
+
+  const removed = registry.businesses[index];
+  const remaining = registry.businesses.filter((b) => b.id !== normalizedId);
+  let newActiveId = registry.activeBusinessId;
+
+  if (newActiveId === normalizedId) {
+    newActiveId = remaining[0]?.id ?? null;
+  }
+
+  writeBusinessRegistry({
+    ...registry,
+    activeBusinessId: newActiveId,
+    businesses: remaining,
+  });
+
+  return { removed, newActiveId };
+}
