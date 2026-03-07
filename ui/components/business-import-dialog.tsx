@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FolderInput } from "@/components/folder-input";
 import {
   Dialog,
   DialogContent,
@@ -82,11 +82,11 @@ export function BusinessImportDialog({
         <div className="space-y-3">
           <div className="space-y-1.5">
             <Label htmlFor="import-project-dir">Project Folder</Label>
-            <Input
+            <FolderInput
               id="import-project-dir"
               placeholder="/Users/you/My Business"
               value={projectDir}
-              onChange={(event) => setProjectDir(event.target.value)}
+              onChange={setProjectDir}
               disabled={submitting}
             />
           </div>

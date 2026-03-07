@@ -5,6 +5,7 @@ import { Building2, Rocket, Cpu, Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FolderInput } from "@/components/folder-input";
 import { cn } from "@/lib/utils";
 import type { WizardConfig } from "./setup-wizard";
 
@@ -105,14 +106,14 @@ export function StepCompany({
         <Label htmlFor="project-dir" className="text-sm font-medium">
           Project Folder
         </Label>
-        <Input
+        <FolderInput
           id="project-dir"
           value={config.projectDir}
-          onChange={(e) => {
-            updateConfig({ projectDir: e.target.value });
+          onChange={(val) => {
+            updateConfig({ projectDir: val });
             if (pathError) setPathError(null);
           }}
-          placeholder="/Users/you/My Startup"
+          autoSuggestBase={config.companyName}
           className="bg-muted/50"
           onKeyDown={(e) => {
             if (e.key === "Enter") handleNext();
@@ -122,7 +123,7 @@ export function StepCompany({
           <p className="text-xs text-destructive">{pathError}</p>
         ) : (
           <p className="text-xs text-muted-foreground">
-            Use a full folder path. We will create the business there.
+            Browse for a folder or type a full path. We will create the business there.
           </p>
         )}
       </div>

@@ -4,7 +4,7 @@
 
 If you discover a security vulnerability in AICIB, please report it responsibly.
 
-**Email:** security@korvin.tech
+**Email:** security@YOURDOMAIN.com
 
 Please include:
 - A description of the vulnerability
