@@ -14,6 +14,10 @@ import type { AicibConfig } from "./config.js";
 import type { PersonaOverlay, AgentPersonaConfig } from "./persona.js";
 import { loadPreset } from "./persona.js";
 import { resolveAllMCPServers, resolveMCPServersForRole, formatMCPContextFromNames, getMCPConfig } from "./mcp.js";
+// Lazy-imported to break circular dependency (knowledge-register imports from this file)
+async function getKnowledgeRegister() {
+  return import("./knowledge-register.js");
+}
 import chalk from "chalk";
 
 // Tools from soul.md that don't exist in the SDK — filter these out
@@ -383,6 +387,7 @@ Keep it concise — 3-5 sentences max.`;
       const sysMsg = message as EngineSystemMessage;
       if (sysMsg.subtype === "init") {
         sessionId = sysMsg.session_id;
+        (await getKnowledgeRegister()).setLastSessionId(sessionId);
       }
     }
 
@@ -419,6 +424,8 @@ export async function sendBrief(
   config: AicibConfig,
   onMessage?: (msg: EngineMessage) => void
 ): Promise<SessionResult> {
+  (await getKnowledgeRegister()).setLastSessionId(sdkSessionId);
+
   const agentsDir = getAgentsDir(projectDir);
   const personaData = loadPersonaFromConfig(config);
   const agents = loadAgentDefinitions(
@@ -480,6 +487,7 @@ REMINDER: Your project directory is ${projectDir}. When delegating to department
       (message as EngineSystemMessage).subtype === "init"
     ) {
       sessionId = message.session_id;
+      (await getKnowledgeRegister()).setLastSessionId(sessionId);
     }
 
     if (onMessage) {
@@ -544,10 +552,12 @@ export async function generateJournalEntry(
     }
 
     if (summaryText.trim()) {
+      const createdSlugs = (await getKnowledgeRegister()).getCreatedSlugsThisSession();
       costTracker.createJournalEntry({
         sessionId,
         directive,
         summary: summaryText.trim(),
+        deliverables: createdSlugs.length > 0 ? createdSlugs : undefined,
         totalCostUsd: result.totalCostUsd,
         numTurns: result.numTurns,
         durationMs: result.durationMs,
@@ -556,6 +566,8 @@ export async function generateJournalEntry(
   } catch (error) {
     // Journal generation is best-effort — don't break the main flow
     console.warn("  Warning: Journal entry generation failed:", error instanceof Error ? error.message : String(error));
+  } finally {
+    (await getKnowledgeRegister()).resetCreatedSlugs();
   }
 }
 
