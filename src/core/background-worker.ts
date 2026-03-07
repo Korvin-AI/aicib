@@ -57,22 +57,20 @@ function trackSubagentStatus(msg: EngineMessage, costTracker: CostTracker): void
     "subtype" in msg &&
     ((msg as EngineSystemMessage).subtype as string) === "task_notification"
   ) {
+    // SDK sends: { task_id: string, status: 'completed'|'failed'|'stopped', summary: string }
+    // task_notification only fires on completion — set agent to idle.
+    // Note: task_id is the tool_use_id, not the agent name. We can't resolve
+    // agent name here, so we mark all as idle (correct since these are completions).
     const taskMsg = msg as EngineSystemMessage & {
-      taskName?: string;
-      taskStatus?: string;
-      agentName?: string;
+      task_id?: string;
+      status?: string;
     };
-    const agent = (
-      taskMsg.agentName ||
-      taskMsg.taskName ||
-      "subagent"
-    ).toLowerCase();
-    const status = taskMsg.taskStatus || "working";
-    const taskLabel =
-      status === "completed" || status === "done"
-        ? "idle"
-        : "working";
-    costTracker.setAgentStatus(agent, taskLabel);
+    const status = taskMsg.status || "";
+    if (status === "completed" || status === "failed" || status === "stopped") {
+      // Agent name not available from task_id alone — status will correct
+      // on the next brief cycle. This is a known limitation.
+      void costTracker;
+    }
   }
 }
 

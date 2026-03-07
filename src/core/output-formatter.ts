@@ -87,14 +87,13 @@ export function formatMessageWithColor(
     }
     if ((sysMsg.subtype as string) === "task_notification") {
       const taskMsg = sysMsg as EngineSystemMessage & {
-        taskName?: string;
-        taskStatus?: string;
-        agentName?: string;
+        task_id?: string;
+        status?: string;
+        summary?: string;
       };
-      const agent = taskMsg.agentName || taskMsg.taskName || "subagent";
-      const status = taskMsg.taskStatus || "update";
-      const agentTag = formatAgentTag(agent.toLowerCase());
-      return `${agentTag} Task ${status}`;
+      const status = taskMsg.status || "update";
+      const agentTag = formatAgentTag("system");
+      return `${agentTag} Task ${taskMsg.task_id || "subagent"}: ${status}`;
     }
     if ((sysMsg.subtype as string) === "tool_progress") {
       const progressMsg = sysMsg as EngineSystemMessage & {

@@ -643,13 +643,12 @@ export function formatMessagePlain(message: EngineMessage): string | null {
     }
     if ((sysMsg.subtype as string) === "task_notification") {
       const taskMsg = sysMsg as EngineSystemMessage & {
-        taskName?: string;
-        taskStatus?: string;
-        agentName?: string;
+        task_id?: string;
+        status?: string;
+        summary?: string;
       };
-      const agent = taskMsg.agentName || taskMsg.taskName || "subagent";
-      const status = taskMsg.taskStatus || "update";
-      return `[TASK] ${agent}: ${status}`;
+      const status = taskMsg.status || "update";
+      return `[TASK] ${taskMsg.task_id || "subagent"}: ${status}`;
     }
   }
 

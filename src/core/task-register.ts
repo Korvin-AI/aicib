@@ -480,7 +480,9 @@ registerMessageHandler("task-delegation-tracker", (msg, config) => {
     return;
   }
 
-  // Intercept Task tool_use blocks from assistant messages to capture delegation intent
+  // 1. Intercept Task tool_use blocks from assistant messages → create task.
+  //    The SDK sends tool_use blocks when the CEO delegates via the Task tool.
+  //    The agent name is in `input.subagent_type` (SDK convention).
   if (msg.type === "assistant" && msg.message?.content) {
     for (const block of msg.message.content) {
       if (
@@ -494,95 +496,144 @@ registerMessageHandler("task-delegation-tracker", (msg, config) => {
         "input" in block
       ) {
         const toolBlock = block as { id: string; input: Record<string, unknown> };
-        const agentName = (toolBlock.input.agent_name as string) || (toolBlock.input.agentName as string) || "";
-        const description = (toolBlock.input.description as string) || (toolBlock.input.prompt as string) || "";
-        if (agentName) {
-          pendingDelegations.set(toolBlock.id, {
-            agentName: agentName.toLowerCase(),
-            description,
-            timestamp: Date.now(),
-          });
-          pruneStaleDelegations();
+        // SDK uses subagent_type for the agent name
+        const agentName = (toolBlock.input.subagent_type as string)
+          || (toolBlock.input.agent_name as string)
+          || (toolBlock.input.agentName as string)
+          || "";
+        const description = (toolBlock.input.description as string) || "";
+        if (!agentName) continue;
+
+        const normalizedAgent = agentName.toLowerCase();
+
+        // Dedup: skip if we just created a task for this agent < 5s ago
+        const entries = agentTaskMap.get(normalizedAgent) || [];
+        if (entries.length > 0 && Date.now() - entries[entries.length - 1].createdAt < 5_000) {
+          continue;
+        }
+
+        const title = description
+          ? (description.length > 100 ? description.slice(0, 97) + "..." : description)
+          : `${normalizedAgent} delegation`;
+
+        // Create the task immediately (delegation = started)
+        queueUpdate(
+          {
+            type: "create",
+            data: {
+              title,
+              description,
+              assigned: normalizedAgent,
+              department: AGENT_DEPARTMENT[normalizedAgent] || "",
+              priority: "medium",
+              status: "in_progress",
+            },
+          },
+          lastProjectDir
+        );
+
+        // Record for cross-handler dedup with TASK::CREATE markers
+        recentDelegationCreates.set(normalizedAgent, Date.now());
+
+        // Map tool_use_id -> agent so we can find the right task on completion
+        pendingDelegations.set(toolBlock.id, {
+          agentName: normalizedAgent,
+          description,
+          timestamp: Date.now(),
+        });
+        pruneStaleDelegations();
+
+        // Track in agentTaskMap for completion matching
+        entries.push({ taskId: -1, createdAt: Date.now() });
+        agentTaskMap.set(normalizedAgent, entries);
+      }
+    }
+  }
+
+  // 2. Intercept tool_result for Task tool_use → complete the task.
+  //    When a Task subagent finishes, the SDK sends a user message with
+  //    a tool_result block whose tool_use_id matches the original Task tool_use.
+  if (msg.type === "user" && msg.message?.content) {
+    for (const block of msg.message.content) {
+      if (
+        typeof block === "object" &&
+        block !== null &&
+        "type" in block &&
+        (block as { type: string }).type === "tool_result" &&
+        "tool_use_id" in block
+      ) {
+        const resultBlock = block as { tool_use_id: string; content?: unknown };
+        const delegation = pendingDelegations.get(resultBlock.tool_use_id);
+        if (!delegation) continue;
+
+        const agentName = delegation.agentName;
+        pendingDelegations.delete(resultBlock.tool_use_id);
+
+        const entries = agentTaskMap.get(agentName);
+        if (!entries || entries.length === 0) continue;
+
+        // Pop the oldest delegation for this agent
+        const entry = entries.shift()!;
+        if (entries.length === 0) {
+          agentTaskMap.delete(agentName);
+        }
+
+        // Resolve the task ID: if -1 (not yet flushed), force a flush and look up
+        if (entry.taskId === -1) {
+          flushPendingUpdates();
+          let tm: TaskManager | undefined;
+          try {
+            tm = new TaskManager(lastProjectDir);
+            const recent = tm.listTasks({ assignee: agentName, status: ["in_progress"] }, 1);
+            if (recent.length > 0) {
+              entry.taskId = recent[0].id;
+            }
+          } catch {
+            // ignore
+          } finally {
+            tm?.close();
+          }
+        }
+
+        if (entry.taskId > 0) {
+          queueUpdate(
+            {
+              type: "update",
+              data: { id: String(entry.taskId), status: "done" },
+            },
+            lastProjectDir
+          );
         }
       }
     }
   }
 
-  // Intercept task_notification system messages
-  if (msg.type !== "system" || !("subtype" in msg)) return;
-  if ((msg as { subtype?: string }).subtype !== "task_notification") return;
+  // 3. Also handle task_notification system messages (SDK v0.2.42+ may send these)
+  if (
+    msg.type === "system" &&
+    "subtype" in msg &&
+    (msg as { subtype?: string }).subtype === "task_notification"
+  ) {
+    const taskMsg = msg as { task_id?: string; status?: string; summary?: string };
+    const taskStatus = taskMsg.status || "";
+    if (taskStatus !== "completed" && taskStatus !== "failed" && taskStatus !== "stopped") return;
 
-  const taskMsg = msg as {
-    taskName?: string;
-    taskStatus?: string;
-    agentName?: string;
-    tool_use_id?: string;
-  };
+    const delegation = taskMsg.task_id ? pendingDelegations.get(taskMsg.task_id) : undefined;
+    if (!delegation) return;
 
-  const agentName = (taskMsg.agentName || taskMsg.taskName || "").toLowerCase();
-  const taskStatus = taskMsg.taskStatus || "";
+    const agentName = delegation.agentName;
+    pendingDelegations.delete(taskMsg.task_id!);
 
-  if (!agentName) return;
-
-  if (taskStatus === "started") {
-    // Dedup: check in-memory timestamp (avoids DB round-trip and timezone issues)
-    const entries = agentTaskMap.get(agentName) || [];
-    if (entries.length > 0 && Date.now() - entries[entries.length - 1].createdAt < 5_000) {
-      return; // Already tracked this agent recently
-    }
-
-    // Check if we have a pending delegation with a description
-    let title = `${agentName} delegation`;
-    let description = "";
-    if (taskMsg.tool_use_id && pendingDelegations.has(taskMsg.tool_use_id)) {
-      const delegation = pendingDelegations.get(taskMsg.tool_use_id)!;
-      if (delegation.description) {
-        title = delegation.description.length > 100
-          ? delegation.description.slice(0, 97) + "..."
-          : delegation.description;
-        description = delegation.description;
-      }
-      pendingDelegations.delete(taskMsg.tool_use_id);
-    }
-
-    // Route through queueUpdate to share the debounced DB connection
-    queueUpdate(
-      {
-        type: "create",
-        data: {
-          title,
-          description,
-          assigned: agentName,
-          department: AGENT_DEPARTMENT[agentName] || "",
-          priority: "medium",
-          status: "in_progress",
-        },
-      },
-      lastProjectDir
-    );
-
-    // Record for cross-handler dedup
-    recentDelegationCreates.set(agentName, Date.now());
-
-    // Store a placeholder task ID (will be resolved by next flush).
-    // We use -1 as a sentinel; on "completed" we look up by assignee if needed.
-    entries.push({ taskId: -1, createdAt: Date.now() });
-    agentTaskMap.set(agentName, entries);
-  } else if (taskStatus === "completed") {
     const entries = agentTaskMap.get(agentName);
     if (!entries || entries.length === 0) return;
 
-    // Pop the oldest delegation for this agent
     const entry = entries.shift()!;
     if (entries.length === 0) {
       agentTaskMap.delete(agentName);
     }
 
-    // Resolve the task ID: if -1 (not yet flushed), force a flush and look up
     if (entry.taskId === -1) {
-      // Force flush so the task exists in DB
       flushPendingUpdates();
-      // Look up the task by assignee
       let tm: TaskManager | undefined;
       try {
         tm = new TaskManager(lastProjectDir);
@@ -598,10 +649,18 @@ registerMessageHandler("task-delegation-tracker", (msg, config) => {
     }
 
     if (entry.taskId > 0) {
+      const completionStatus = taskStatus === "completed" ? "done" : "cancelled";
+      const summary = taskMsg.summary
+        ? (taskMsg.summary.length > 2000 ? taskMsg.summary.slice(0, 1997) + "..." : taskMsg.summary)
+        : "";
       queueUpdate(
         {
           type: "update",
-          data: { id: String(entry.taskId), status: "done" },
+          data: {
+            id: String(entry.taskId),
+            status: completionStatus,
+            ...(summary ? { output_summary: summary } : {}),
+          },
         },
         lastProjectDir
       );
