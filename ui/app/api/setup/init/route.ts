@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { tryGetProjectDir } from "@/lib/config";
+import { getAicibBin, tryGetProjectDir } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 
@@ -78,9 +78,9 @@ export async function POST(request: Request) {
 
     // Shell out to aicib init with --persona flag for non-interactive mode
     const result = spawnSync(
-      "npx",
+      "node",
       [
-        "aicib",
+        getAicibBin(),
         "init",
         "-t",
         template,

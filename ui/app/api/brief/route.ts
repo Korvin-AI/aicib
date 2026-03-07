@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { spawn } from "node:child_process";
-import { tryGetProjectDir } from "@/lib/config";
+import { getAicibBin, tryGetProjectDir } from "@/lib/config";
 import { getDb } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -72,8 +72,8 @@ export async function POST(request: Request) {
     // Spawn `aicib brief -b <directive>` as a subprocess
     // This avoids importing core modules and uses the existing CLI infrastructure
     const child = spawn(
-      "npx",
-      ["aicib", "brief", "-b", "-d", projectDir, directive.trim()],
+      "node",
+      [getAicibBin(), "brief", "-b", "-d", projectDir, directive.trim()],
       {
         detached: true,
         stdio: "ignore",

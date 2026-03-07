@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { tryGetActiveProjectDir } from "./business-context";
 
 /**
@@ -18,4 +20,19 @@ export function getProjectDir(): string {
  */
 export function tryGetProjectDir(): string | null {
   return tryGetActiveProjectDir();
+}
+
+/**
+ * Path to the local aicib CLI binary.
+ * The UI runs from aicib/ui/, so the CLI is at ../dist/index.js.
+ * Throws a clear error if the binary hasn't been built yet.
+ */
+export function getAicibBin(): string {
+  const bin = path.resolve(process.cwd(), "..", "dist", "index.js");
+  if (!fs.existsSync(bin)) {
+    throw new Error(
+      `CLI binary not found at ${bin}. Run "npm run build" in the aicib/ directory first.`
+    );
+  }
+  return bin;
 }

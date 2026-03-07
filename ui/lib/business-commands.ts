@@ -2,6 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { getBusinessHealth } from "./business-context";
+import { getAicibBin } from "./config";
 
 export const VALID_TEMPLATES = ["saas-startup"] as const;
 export const VALID_PERSONAS = [
@@ -70,9 +71,9 @@ export function runInitCommand(input: {
   fs.mkdirSync(input.projectDir, { recursive: true });
 
   const init = spawnSync(
-    "npx",
+    "node",
     [
-      "aicib",
+      getAicibBin(),
       "init",
       "-t",
       input.template,
@@ -126,7 +127,7 @@ export function startBusinessDetached(projectDir: string): {
     };
   }
 
-  const child = spawn("npx", ["aicib", "start", "-d", projectDir], {
+  const child = spawn("node", [getAicibBin(), "start", "-d", projectDir], {
     detached: true,
     stdio: "ignore",
     cwd: projectDir,
@@ -156,7 +157,7 @@ export function stopBusinessSync(projectDir: string): {
       };
     }
 
-    const stop = spawnSync("npx", ["aicib", "stop", "-d", projectDir], {
+    const stop = spawnSync("node", [getAicibBin(), "stop", "-d", projectDir], {
       cwd: projectDir,
       timeout: 120000,
       encoding: "utf-8",
