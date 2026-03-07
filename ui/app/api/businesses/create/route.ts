@@ -8,8 +8,22 @@ import {
   VALID_TEMPLATES,
 } from "@/lib/business-commands";
 import { upsertBusiness } from "@/lib/business-registry";
+import { getDbForProject, ensureWikiTable } from "@/lib/db-project";
 
 export const dynamic = "force-dynamic";
+
+interface BusinessProfile {
+  whatYouSell?: string;
+  primaryCustomer?: string;
+  biggestChallenge?: string;
+  monthlyRevenue?: string;
+  customerCount?: string;
+  topMetric?: string;
+  weeklyHours?: string;
+  automateTask?: string;
+  customerChannel?: string;
+  weeklyWin?: string;
+}
 
 interface CreateBusinessRequestBody {
   companyName: string;
@@ -19,6 +33,8 @@ interface CreateBusinessRequestBody {
   settings?: { cost_limit_daily?: number; cost_limit_monthly?: number };
   projectDir: string;
   startNow?: boolean;
+  profile?: BusinessProfile;
+  sevenDayPlan?: string;
 }
 
 function parseConfigMetadata(projectDir: string): { name: string; template: string } {
@@ -114,6 +130,59 @@ export async function POST(request: Request) {
       template: metadata.template,
       setActive: true,
     });
+
+    // Save business profile and 7-day plan as wiki articles
+    if (body.profile || body.sevenDayPlan) {
+      const db = getDbForProject(projectDir);
+      try {
+        ensureWikiTable(db);
+
+        if (body.profile) {
+          const p = body.profile;
+          const hasContent = Object.values(p).some((v) => v && v.trim());
+          if (hasContent) {
+            const md = [
+              "# Business Profile",
+              "",
+              p.whatYouSell ? `## What We Sell\n${p.whatYouSell}` : "",
+              p.primaryCustomer ? `## Primary Customer\n${p.primaryCustomer}` : "",
+              p.biggestChallenge ? `## Biggest Challenge\n${p.biggestChallenge}` : "",
+              p.monthlyRevenue ? `## Monthly Revenue\n${p.monthlyRevenue}` : "",
+              p.customerCount ? `## Customer Count\n${p.customerCount}` : "",
+              p.topMetric ? `## Top Metric (30-day goal)\n${p.topMetric}` : "",
+              p.weeklyHours ? `## Weekly Time Available\n${p.weeklyHours}` : "",
+              p.automateTask ? `## Task to Automate\n${p.automateTask}` : "",
+              p.customerChannel ? `## Customer Channel\n${p.customerChannel}` : "",
+              p.weeklyWin ? `## Weekly Win Goal\n${p.weeklyWin}` : "",
+            ]
+              .filter(Boolean)
+              .join("\n\n");
+
+            db.prepare(
+              `INSERT INTO wiki_articles (slug, title, section, content, created_by, updated_by)
+               VALUES ('business-profile', 'Business Profile', 'overview', ?, 'setup-wizard', 'setup-wizard')
+               ON CONFLICT(slug) DO UPDATE SET
+                 content = excluded.content,
+                 updated_by = excluded.updated_by,
+                 updated_at = datetime('now')`
+            ).run(md);
+          }
+        }
+
+        if (body.sevenDayPlan) {
+          db.prepare(
+            `INSERT INTO wiki_articles (slug, title, section, content, created_by, updated_by)
+             VALUES ('seven-day-plan', '7-Day Plan', 'overview', ?, 'setup-wizard', 'setup-wizard')
+             ON CONFLICT(slug) DO UPDATE SET
+               content = excluded.content,
+               updated_by = excluded.updated_by,
+               updated_at = datetime('now')`
+          ).run(body.sevenDayPlan);
+        }
+      } finally {
+        db.close();
+      }
+    }
 
     const shouldStart = body.startNow !== false;
     if (!shouldStart) {

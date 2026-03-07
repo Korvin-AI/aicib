@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { StepCompany } from "./step-company";
-import { StepTeam } from "./step-team";
-import { StepBudget } from "./step-budget";
-import { StepReview } from "./step-review";
+import { useRef, useState } from "react";
+import { StepCompanyInfo } from "./step-company-info";
+import { StepBusiness } from "./step-business";
+import { StepGoals } from "./step-goals";
+import { StepLaunch } from "./step-launch";
 import { cn } from "@/lib/utils";
 
 export interface AgentConfig {
@@ -17,14 +17,24 @@ export interface AgentConfig {
   workers?: AgentConfig[];
 }
 
+export interface BusinessProfile {
+  whatYouSell: string;
+  primaryCustomer: string;
+  biggestChallenge: string;
+  monthlyRevenue: string;
+  customerCount: string;
+  topMetric: string;
+  weeklyHours: string;
+  automateTask: string;
+  customerChannel: string;
+  weeklyWin: string;
+}
+
 export interface WizardConfig {
   companyName: string;
   projectDir: string;
-  template: string;
-  persona: string;
-  agents: AgentConfig[];
-  dailyLimit: number;
-  monthlyLimit: number;
+  websiteUrl: string;
+  profile: BusinessProfile;
 }
 
 const defaultAgents: AgentConfig[] = [
@@ -101,26 +111,38 @@ const defaultAgents: AgentConfig[] = [
   },
 ];
 
-type WizardStep = "company" | "team" | "budget" | "review";
+const emptyProfile: BusinessProfile = {
+  whatYouSell: "",
+  primaryCustomer: "",
+  biggestChallenge: "",
+  monthlyRevenue: "",
+  customerCount: "",
+  topMetric: "",
+  weeklyHours: "",
+  automateTask: "",
+  customerChannel: "",
+  weeklyWin: "",
+};
+
+type WizardStep = "company-info" | "business" | "goals" | "launch";
 
 const steps: { key: WizardStep; label: string }[] = [
-  { key: "company", label: "Company" },
-  { key: "team", label: "Team" },
-  { key: "budget", label: "Budget" },
-  { key: "review", label: "Launch" },
+  { key: "company-info", label: "Company Info" },
+  { key: "business", label: "About Your Business" },
+  { key: "goals", label: "Your Goals" },
+  { key: "launch", label: "Launch" },
 ];
 
 export function SetupWizard() {
-  const [step, setStep] = useState<WizardStep>("company");
+  const [step, setStep] = useState<WizardStep>("company-info");
   const [config, setConfig] = useState<WizardConfig>({
     companyName: "",
     projectDir: "",
-    template: "saas-startup",
-    persona: "professional",
-    agents: defaultAgents,
-    dailyLimit: 50,
-    monthlyLimit: 500,
+    websiteUrl: "",
+    profile: { ...emptyProfile },
   });
+  const filesRef = useRef<File[]>([]);
+  const [, forceUpdate] = useState(0);
 
   const currentIndex = steps.findIndex((s) => s.key === step);
 
@@ -138,6 +160,18 @@ export function SetupWizard() {
 
   function updateConfig(partial: Partial<WizardConfig>) {
     setConfig((prev) => ({ ...prev, ...partial }));
+  }
+
+  function updateProfile(partial: Partial<BusinessProfile>) {
+    setConfig((prev) => ({
+      ...prev,
+      profile: { ...prev.profile, ...partial },
+    }));
+  }
+
+  function handleFilesChange(newFiles: File[]) {
+    filesRef.current = newFiles;
+    forceUpdate((n) => n + 1);
   }
 
   return (
@@ -158,7 +192,6 @@ export function SetupWizard() {
           <div key={s.key} className="flex items-center gap-2">
             <button
               onClick={() => {
-                // Only allow going back to completed steps
                 if (i < currentIndex) setStep(s.key);
               }}
               className={cn(
@@ -196,31 +229,38 @@ export function SetupWizard() {
 
       {/* Step content */}
       <div className="rounded-lg border border-border bg-card p-6">
-        {step === "company" && (
-          <StepCompany
+        {step === "company-info" && (
+          <StepCompanyInfo
             config={config}
             updateConfig={updateConfig}
+            files={filesRef.current}
+            onFilesChange={handleFilesChange}
             onNext={goNext}
           />
         )}
-        {step === "team" && (
-          <StepTeam
+        {step === "business" && (
+          <StepBusiness
             config={config}
-            updateConfig={updateConfig}
-            onNext={goNext}
-            onBack={goBack}
-          />
-        )}
-        {step === "budget" && (
-          <StepBudget
-            config={config}
-            updateConfig={updateConfig}
+            updateProfile={updateProfile}
             onNext={goNext}
             onBack={goBack}
           />
         )}
-        {step === "review" && (
-          <StepReview config={config} onBack={goBack} />
+        {step === "goals" && (
+          <StepGoals
+            config={config}
+            updateProfile={updateProfile}
+            onNext={goNext}
+            onBack={goBack}
+          />
+        )}
+        {step === "launch" && (
+          <StepLaunch
+            config={config}
+            defaultAgents={defaultAgents}
+            files={filesRef.current}
+            onBack={goBack}
+          />
         )}
       </div>
     </div>

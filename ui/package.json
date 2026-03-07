@@ -11,13 +11,16 @@
     "test:e2e:headed": "playwright test --headed"
   },
   "dependencies": {
+    "@mendable/firecrawl-js": "^4.15.4",
     "agentation": "^2.2.1",
     "agentation-mcp": "^1.2.0",
     "better-sqlite3": "^12.6.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.574.0",
+    "mammoth": "^1.11.0",
     "next": "16.1.6",
+    "pdf-parse": "^2.4.5",
     "radix-ui": "^1.4.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
