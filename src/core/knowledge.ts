@@ -11,7 +11,12 @@ export type WikiSection =
   | "brand"
   | "customers"
   | "competitors"
-  | "general";
+  | "general"
+  | "deliverables"
+  | "reports"
+  | "campaigns"
+  | "specs"
+  | "drafts";
 
 export type JournalEntryType =
   | "task_outcome"
@@ -32,6 +37,11 @@ export const VALID_WIKI_SECTIONS: WikiSection[] = [
   "customers",
   "competitors",
   "general",
+  "deliverables",
+  "reports",
+  "campaigns",
+  "specs",
+  "drafts",
 ];
 
 export const VALID_JOURNAL_ENTRY_TYPES: JournalEntryType[] = [
@@ -65,6 +75,7 @@ export interface WikiArticle {
   version: number;
   created_by: string;
   updated_by: string;
+  session_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -135,6 +146,7 @@ export interface CreateArticleInput {
   section?: WikiSection;
   content: string;
   created_by?: string;
+  session_id?: string;
 }
 
 export interface UpdateArticleInput {
@@ -231,15 +243,25 @@ export class KnowledgeManager {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       slug TEXT NOT NULL UNIQUE,
       title TEXT NOT NULL,
-      section TEXT NOT NULL DEFAULT 'general'
-        CHECK(section IN ('overview','products','policies','brand','customers','competitors','general')),
+      section TEXT NOT NULL DEFAULT 'general',
       content TEXT NOT NULL DEFAULT '',
       version INTEGER NOT NULL DEFAULT 1,
       created_by TEXT NOT NULL DEFAULT 'ceo',
       updated_by TEXT NOT NULL DEFAULT 'ceo',
+      session_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`).run();
+
+    // Migration: add session_id column to existing DBs
+    try {
+      this.db.prepare("ALTER TABLE wiki_articles ADD COLUMN session_id TEXT").run();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!msg.includes("duplicate column")) {
+        console.warn("  Warning: wiki_articles migration failed:", msg);
+      }
+    }
 
     this.db.prepare(`CREATE TABLE IF NOT EXISTS wiki_article_versions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -300,6 +322,7 @@ export class KnowledgeManager {
     this.db.prepare("CREATE INDEX IF NOT EXISTS idx_wiki_section ON wiki_articles(section)").run();
     this.db.prepare("CREATE INDEX IF NOT EXISTS idx_wiki_slug ON wiki_articles(slug)").run();
     this.db.prepare("CREATE INDEX IF NOT EXISTS idx_wiki_updated ON wiki_articles(updated_at)").run();
+    this.db.prepare("CREATE INDEX IF NOT EXISTS idx_wiki_session ON wiki_articles(session_id)").run();
     this.db.prepare("CREATE INDEX IF NOT EXISTS idx_wiki_versions_article ON wiki_article_versions(article_id)").run();
     this.db.prepare("CREATE INDEX IF NOT EXISTS idx_journal_role ON agent_journals(agent_role)").run();
     this.db.prepare("CREATE INDEX IF NOT EXISTS idx_journal_type ON agent_journals(entry_type)").run();
@@ -319,8 +342,8 @@ export class KnowledgeManager {
   createArticle(input: CreateArticleInput): WikiArticle {
     const result = this.db
       .prepare(
-        `INSERT INTO wiki_articles (slug, title, section, content, created_by, updated_by)
-         VALUES (?, ?, ?, ?, ?, ?)`
+        `INSERT INTO wiki_articles (slug, title, section, content, created_by, updated_by, session_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         input.slug,
@@ -328,7 +351,8 @@ export class KnowledgeManager {
         input.section || "general",
         input.content,
         input.created_by || "ceo",
-        input.created_by || "ceo"
+        input.created_by || "ceo",
+        input.session_id ?? null
       );
 
     const article = this.getArticleById(Number(result.lastInsertRowid));
@@ -433,6 +457,14 @@ export class KnowledgeManager {
         "SELECT * FROM wiki_article_versions WHERE article_id = ? ORDER BY version DESC"
       )
       .all(article.id) as WikiArticleVersion[];
+  }
+
+  listArticlesBySession(sessionId: string): WikiArticle[] {
+    return this.db
+      .prepare(
+        "SELECT * FROM wiki_articles WHERE session_id = ? ORDER BY created_at DESC"
+      )
+      .all(sessionId) as WikiArticle[];
   }
 
   canEdit(agentRole: string, config: KnowledgeConfig): boolean {
@@ -749,8 +781,12 @@ export class KnowledgeManager {
 
   // ── Context Formatters ────────────────────────────────────────────
 
-  formatWikiForContext(maxChars: number = 3000): string {
-    const articles = this.listArticles();
+  formatWikiForContext(maxChars: number = 3000, options?: { excludeSections?: WikiSection[] }): string {
+    const allArticles = this.listArticles();
+    const exclude = options?.excludeSections;
+    const articles = exclude
+      ? allArticles.filter(a => !exclude.includes(a.section as WikiSection))
+      : allArticles;
     if (articles.length === 0) return "";
 
     const lines: string[] = ["## Company Wiki"];
@@ -847,6 +883,128 @@ export class KnowledgeManager {
     }
 
     return lines.join("\n");
+  }
+
+  // ── File Scanner ──────────────────────────────────────────────────
+
+  scanAndImportFiles(
+    projectDir: string,
+    options?: { dryRun?: boolean; sessionId?: string; author?: string }
+  ): { imported: string[]; skipped: string[]; errors: string[] } {
+    const imported: string[] = [];
+    const skipped: string[] = [];
+    const errors: string[] = [];
+
+    const EXCLUDE_DIRS = new Set([".aicib", ".claude", "node_modules", "dist", ".git"]);
+    const DIR_TO_SECTION: Record<string, WikiSection> = {
+      marketing: "campaigns",
+      engineering: "specs",
+      finance: "reports",
+      product: "specs",
+      design: "drafts",
+      content: "drafts",
+      docs: "general",
+    };
+
+    const mdFiles = this.findMarkdownFiles(projectDir, projectDir, EXCLUDE_DIRS);
+
+    for (const relPath of mdFiles) {
+      try {
+        const slug = relPath.replace(/\.md$/i, "").replace(/[\\/]/g, "-");
+        const existing = this.getArticle(slug);
+
+        if (existing) {
+          // Check if file is newer than DB entry
+          const filePath = path.join(projectDir, relPath);
+          const fileStat = fs.statSync(filePath);
+          const fileModified = fileStat.mtime;
+          const dbUpdated = new Date(existing.updated_at + "Z");
+
+          if (fileModified > dbUpdated) {
+            // Update existing article with newer file content
+            if (!options?.dryRun) {
+              const content = fs.readFileSync(filePath, "utf-8");
+              const title = this.extractTitle(content, relPath);
+              this.updateArticle(slug, {
+                title,
+                content,
+                updated_by: options?.author || "file-scan",
+              });
+            }
+            imported.push(relPath);
+          } else {
+            skipped.push(relPath);
+          }
+          continue;
+        }
+
+        const filePath = path.join(projectDir, relPath);
+        const content = fs.readFileSync(filePath, "utf-8");
+        const title = this.extractTitle(content, relPath);
+
+        // Map directory to wiki section
+        const topDir = relPath.split(/[\\/]/)[0]?.toLowerCase() || "";
+        const section: WikiSection = DIR_TO_SECTION[topDir] || "deliverables";
+
+        if (!options?.dryRun) {
+          this.createArticle({
+            slug,
+            title,
+            section,
+            content,
+            created_by: options?.author || "file-scan",
+            session_id: options?.sessionId,
+          });
+        }
+
+        imported.push(relPath);
+      } catch (err) {
+        errors.push(`${relPath}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    return { imported, skipped, errors };
+  }
+
+  private findMarkdownFiles(
+    baseDir: string,
+    currentDir: string,
+    excludeDirs: Set<string>
+  ): string[] {
+    const results: string[] = [];
+
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(currentDir, { withFileTypes: true });
+    } catch {
+      return results;
+    }
+
+    for (const entry of entries) {
+      if (entry.name.startsWith(".")) continue;
+
+      if (entry.isDirectory()) {
+        if (excludeDirs.has(entry.name)) continue;
+        const subResults = this.findMarkdownFiles(
+          baseDir,
+          path.join(currentDir, entry.name),
+          excludeDirs
+        );
+        results.push(...subResults);
+      } else if (entry.isFile() && entry.name.endsWith(".md")) {
+        results.push(path.relative(baseDir, path.join(currentDir, entry.name)));
+      }
+    }
+
+    return results;
+  }
+
+  private extractTitle(content: string, relPath: string): string {
+    const match = content.match(/^#\s+(.+)$/m);
+    if (match) return match[1].trim();
+    // Fallback to filename without extension
+    const filename = path.basename(relPath, ".md");
+    return filename.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────────

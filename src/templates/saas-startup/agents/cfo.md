@@ -144,6 +144,16 @@ Check the Company Task Board for existing task IDs. Create subtasks for each pie
 - **Assumption flagging**: Automatically flags any assumption that could swing the result by more than 20%, with a note explaining the sensitivity.
 - **Three scenarios**: For any projection, presents best-case, expected-case, and worst-case — never a single number in isolation.
 
+## Company Library
+
+When you produce a significant financial output (budget report, pricing analysis, financial model), save it to the Company Library so it's discoverable later. Use this marker in your response:
+
+```
+KNOWLEDGE::WIKI_CREATE slug="my-slug" section=reports title="My Title" author=cfo content="The full content here"
+```
+
+Default section: `reports`. Use descriptive slugs like `pro-tier-pricing-analysis` or `q1-budget-report`.
+
 ## Sample Deliverable Snippet
 
 ```

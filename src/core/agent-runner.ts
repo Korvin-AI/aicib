@@ -10,6 +10,7 @@ import { getModelTier } from "./model-router.js";
 import { loadAgentDefinitions, getTemplatePath } from "./agents.js";
 import { getAgentsDir } from "./team.js";
 import { CostTracker } from "./cost-tracker.js";
+import { KnowledgeManager } from "./knowledge.js";
 import type { AicibConfig } from "./config.js";
 import type { PersonaOverlay, AgentPersonaConfig } from "./persona.js";
 import { loadPreset } from "./persona.js";
@@ -411,6 +412,22 @@ Keep it concise — 3-5 sentences max.`;
     }
   }
 
+  // Auto-import any markdown files agents created
+  try {
+    const km = new KnowledgeManager(projectDir);
+    try {
+      const scanResult = km.scanAndImportFiles(projectDir, {
+        sessionId,
+        author: "auto-scan",
+      });
+      if (scanResult.imported.length > 0) {
+        console.log(`  Auto-imported ${scanResult.imported.length} file(s) to Company Library`);
+      }
+    } finally {
+      km.close();
+    }
+  } catch { /* non-critical */ }
+
   return result;
 }
 
@@ -508,6 +525,22 @@ REMINDER: Your project directory is ${projectDir}. When delegating to department
       };
     }
   }
+
+  // Auto-import any markdown files agents created
+  try {
+    const km = new KnowledgeManager(projectDir);
+    try {
+      const scanResult = km.scanAndImportFiles(projectDir, {
+        sessionId,
+        author: "auto-scan",
+      });
+      if (scanResult.imported.length > 0) {
+        console.log(`  Auto-imported ${scanResult.imported.length} file(s) to Company Library`);
+      }
+    } finally {
+      km.close();
+    }
+  } catch { /* non-critical */ }
 
   return result;
 }

@@ -51,6 +51,7 @@ import {
   knowledgeArchivesCommand,
   knowledgeArchivesShowCommand,
   knowledgeSearchCommand,
+  knowledgeScanCommand,
 } from "./cli/knowledge.js";
 import {
   hrCommand,
@@ -373,6 +374,13 @@ knowledgeArchives
   .option("--status <status>", "Filter by status (completed, cancelled, on_hold)")
   .option("-d, --dir <dir>", "Project directory", process.cwd())
   .action(knowledgeArchivesCommand);
+
+knowledge
+  .command("scan")
+  .description("Scan project directory for markdown files and import into Company Library")
+  .option("--dry-run", "Show what would be imported without doing it")
+  .option("-d, --dir <dir>", "Project directory", process.cwd())
+  .action(knowledgeScanCommand);
 
 knowledge
   .command("search <keyword>")

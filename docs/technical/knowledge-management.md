@@ -25,7 +25,7 @@ Same hook pattern as Tasks and Intelligence features:
 4. Register.ts calls `registerContextProvider()` for `company-knowledge` — injects wiki + decisions + archives into agent prompt
 5. Register.ts calls `registerMessageHandler()` for `knowledge-actions` — parses KNOWLEDGE:: markers from agent output
 
-**Core files NOT modified:** `agent-runner.ts`, `config.ts`, `cost-tracker.ts`
+**Core files modified:** `agent-runner.ts` (imports slug tracker, populates `ceo_journal.deliverables`)
 
 ## Database Schema
 
@@ -36,11 +36,12 @@ Same hook pattern as Tasks and Intelligence features:
 | id | INTEGER PK | Auto-increment ID |
 | slug | TEXT UNIQUE | URL-friendly identifier |
 | title | TEXT | Article title |
-| section | TEXT | `overview`, `products`, `policies`, `brand`, `customers`, `competitors`, `general` |
+| section | TEXT | `overview`, `products`, `policies`, `brand`, `customers`, `competitors`, `general`, `deliverables`, `reports`, `campaigns`, `specs`, `drafts` |
 | content | TEXT | Article content |
 | version | INTEGER | Current version number |
 | created_by | TEXT | Agent role that created |
 | updated_by | TEXT | Agent role that last updated |
+| session_id | TEXT | Session that created the article (nullable) |
 | created_at | TEXT | ISO 8601 datetime |
 | updated_at | TEXT | ISO 8601 datetime |
 
@@ -124,11 +125,31 @@ knowledge:
     - cmo
 ```
 
+## Wiki Sections
+
+### Company Knowledge sections (original)
+- `overview` — Company overview, mission, values
+- `products` — Product descriptions, features, roadmap
+- `policies` — Internal policies and procedures
+- `brand` — Brand guidelines, voice, visual identity
+- `customers` — Customer personas, segments, feedback
+- `competitors` — Competitive landscape, analysis
+- `general` — Uncategorized knowledge
+
+### Output sections (Company Library)
+- `deliverables` — Consolidated outputs, strategic plans (CEO)
+- `reports` — Financial models, budget reports, pricing analyses (CFO, financial-analyst)
+- `campaigns` — Campaigns, positioning docs, market analyses (CMO)
+- `specs` — Architecture decisions, technical specs, implementation summaries (CTO, engineers)
+- `drafts` — Blog posts, landing page copy, email sequences (content-writer)
+
+Output sections are **excluded from context injection** to avoid bloating agent prompts with large deliverables. They are browsable via CLI (`aicib knowledge wiki`) and Web UI (`/knowledge`).
+
 ## Context Provider: company-knowledge
 
 Injects a combined context block into the CEO's prompt:
 
-1. **Wiki summary** (~3000 chars): Section headings with article titles; overview section includes content previews
+1. **Wiki summary** (~3000 chars): Section headings with article titles; overview section includes content previews. **Output sections excluded** (`deliverables`, `reports`, `campaigns`, `specs`, `drafts`).
 2. **Active decisions** (~1500 chars): Recent active decisions as bullet points
 3. **Project archives** (~1000 chars): Recent project summaries
 
@@ -141,12 +162,14 @@ Total budget: ~5500 chars (~2750 tokens).
 ### Structured Markers
 
 ```
-KNOWLEDGE::WIKI_CREATE slug="..." section=... title="..." content="..."
+KNOWLEDGE::WIKI_CREATE slug="..." section=... title="..." author=cmo content="..."
 KNOWLEDGE::WIKI_UPDATE slug="..." content="..."
 KNOWLEDGE::JOURNAL type=lesson title="..." content="..."
 KNOWLEDGE::DECISION title="..." options="A,B,C" reasoning="..." outcome="..."
 KNOWLEDGE::ARCHIVE project="..." description="..." status=completed deliverables="file1,file2" lessons="..."
 ```
+
+The `author=` parameter in `WIKI_CREATE` is optional (defaults to `ceo`). It identifies which agent role created the article.
 
 ### Natural Language Fallbacks
 
@@ -154,6 +177,12 @@ KNOWLEDGE::ARCHIVE project="..." description="..." status=completed deliverables
 - `decided to/that <text>` → creates decision entry
 
 Minimum 10 characters to reduce false positives.
+
+## Deliverables Tracking
+
+When agents create wiki articles via `KNOWLEDGE::WIKI_CREATE`, the slugs are collected in `createdSlugsThisSession` (in `knowledge-register.ts`). At session end, `generateJournalEntry()` in `agent-runner.ts` passes these slugs as `deliverables` to `costTracker.createJournalEntry()`, populating the previously-null `ceo_journal.deliverables` field.
+
+The `session_id` column on `wiki_articles` links articles to the session that created them, enabling queries like "what did this session produce?" via `listArticlesBySession()`.
 
 ## CEO Journal Coexistence
 

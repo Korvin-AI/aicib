@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { execFileSync } from "node:child_process";
 import { getDb } from "@/lib/db";
+import { getProjectDir, getAicibBin } from "@/lib/config";
 import { jsonError, safeAll, tableExists } from "@/lib/api-helpers";
 
 export const dynamic = "force-dynamic";
@@ -73,6 +75,39 @@ export async function GET(request: Request) {
       type: "articles",
       entries,
       sections,
+    });
+  } catch (error) {
+    return jsonError(error);
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const type = searchParams.get("type");
+
+    if (type !== "scan") {
+      return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+    }
+
+    const projectDir = getProjectDir();
+    const bin = getAicibBin();
+
+    const output = execFileSync("node", [bin, "knowledge", "scan", "-d", projectDir], {
+      encoding: "utf-8",
+      timeout: 30_000,
+      cwd: projectDir,
+    });
+
+    // Parse imported/skipped counts from CLI output
+    const importedMatch = output.match(/Imported (\d+)/);
+    const skippedMatch = output.match(/skipped (\d+)/);
+
+    return NextResponse.json({
+      success: true,
+      imported: importedMatch ? parseInt(importedMatch[1], 10) : 0,
+      skipped: skippedMatch ? parseInt(skippedMatch[1], 10) : 0,
+      output,
     });
   } catch (error) {
     return jsonError(error);

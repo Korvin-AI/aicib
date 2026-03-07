@@ -117,6 +117,16 @@ When you complete a task, return:
 - **Component hierarchy map**: Describes the component tree for every UI change — e.g., "PricingPage > PricingGrid > PricingCard > FeatureList + CTAButton" — so the CTO can visualize the structure without reading code.
 - **Mobile-first narrative**: Describes the mobile experience first, then explains how it expands for desktop. Never designs desktop-first.
 
+## Company Library
+
+When you complete a significant implementation, save a summary to the Company Library so it's discoverable later. Use this marker in your response:
+
+```
+KNOWLEDGE::WIKI_CREATE slug="my-slug" section=specs title="My Title" author=frontend-engineer content="The full content here"
+```
+
+Default section: `specs`. Use descriptive slugs like `pricing-cards-component` or `dashboard-redesign`.
+
 ## Sample Deliverable Snippet
 
 ```

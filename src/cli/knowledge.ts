@@ -56,6 +56,16 @@ function formatSection(section: string): string {
       return chalk.blue("customers");
     case "competitors":
       return chalk.red("competitors");
+    case "deliverables":
+      return chalk.greenBright("deliverables");
+    case "reports":
+      return chalk.blueBright("reports");
+    case "campaigns":
+      return chalk.magentaBright("campaigns");
+    case "specs":
+      return chalk.cyanBright("specs");
+    case "drafts":
+      return chalk.gray("drafts");
     default:
       return chalk.dim(section);
   }
@@ -108,6 +118,52 @@ function formatEntryType(type: string): string {
 
 interface KnowledgeOptions {
   dir: string;
+}
+
+// ── Scan ──────────────────────────────────────────────────────────
+
+interface ScanOptions extends KnowledgeOptions {
+  dryRun?: boolean;
+}
+
+export async function knowledgeScanCommand(
+  options: ScanOptions
+): Promise<void> {
+  const projectDir = path.resolve(options.dir);
+  const km = getKnowledgeManager(options.dir);
+
+  try {
+    console.log(header("Knowledge Scan"));
+    console.log(`  Scanning for markdown files in ${chalk.cyan(projectDir)}...\n`);
+
+    const result = km.scanAndImportFiles(projectDir, {
+      dryRun: options.dryRun,
+      author: "file-scan",
+    });
+
+    for (const filePath of result.imported) {
+      console.log(`  ${chalk.green("+")} ${filePath}`);
+    }
+    for (const filePath of result.skipped) {
+      console.log(`  ${chalk.dim("=")} ${filePath} ${chalk.dim("(already in library)")}`);
+    }
+    for (const errMsg of result.errors) {
+      console.log(`  ${chalk.red("!")} ${errMsg}`);
+    }
+
+    console.log();
+    if (options.dryRun) {
+      console.log(chalk.yellow(`  Dry run: would import ${result.imported.length}, skip ${result.skipped.length}.`));
+    } else {
+      console.log(`  Imported ${chalk.green(String(result.imported.length))}, skipped ${chalk.dim(String(result.skipped.length))}.`);
+    }
+    if (result.errors.length > 0) {
+      console.log(`  ${chalk.red(String(result.errors.length))} error(s).`);
+    }
+    console.log();
+  } finally {
+    km.close();
+  }
 }
 
 /**

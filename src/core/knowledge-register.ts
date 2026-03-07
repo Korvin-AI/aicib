@@ -120,12 +120,12 @@ registerTable({
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     slug TEXT NOT NULL UNIQUE,
     title TEXT NOT NULL,
-    section TEXT NOT NULL DEFAULT 'general'
-      CHECK(section IN ('overview','products','policies','brand','customers','competitors','general')),
+    section TEXT NOT NULL DEFAULT 'general',
     content TEXT NOT NULL DEFAULT '',
     version INTEGER NOT NULL DEFAULT 1,
     created_by TEXT NOT NULL DEFAULT 'ceo',
     updated_by TEXT NOT NULL DEFAULT 'ceo',
+    session_id TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
@@ -133,6 +133,7 @@ registerTable({
     "CREATE INDEX IF NOT EXISTS idx_wiki_section ON wiki_articles(section)",
     "CREATE INDEX IF NOT EXISTS idx_wiki_slug ON wiki_articles(slug)",
     "CREATE INDEX IF NOT EXISTS idx_wiki_updated ON wiki_articles(updated_at)",
+    "CREATE INDEX IF NOT EXISTS idx_wiki_session ON wiki_articles(session_id)",
   ],
 });
 
@@ -245,7 +246,9 @@ registerContextProvider("company-knowledge", (config, projectDir) => {
 
     const parts: string[] = [];
 
-    const wikiContext = km.formatWikiForContext(maxWikiChars);
+    const wikiContext = km.formatWikiForContext(maxWikiChars, {
+      excludeSections: ["deliverables", "reports", "campaigns", "specs", "drafts"],
+    });
     if (wikiContext) parts.push(wikiContext);
 
     const decisionsContext = km.formatDecisionLogForContext(maxDecisions);
@@ -280,6 +283,20 @@ let flushTimer: ReturnType<typeof setTimeout> | null = null;
 // Module-level projectDir set by the context provider and read by the message handler.
 // Safe: AICIB runs one session per CLI process; background workers are separate Node processes.
 let lastProjectDir: string | null = null;
+let lastSessionId: string | null = null;
+const createdSlugsThisSession: string[] = [];
+
+export function setLastSessionId(id: string): void {
+  lastSessionId = id;
+}
+
+export function getCreatedSlugsThisSession(): string[] {
+  return [...createdSlugsThisSession];
+}
+
+export function resetCreatedSlugs(): void {
+  createdSlugsThisSession.length = 0;
+}
 
 function queueUpdate(
   update: PendingKnowledgeUpdate,
@@ -307,7 +324,7 @@ function flushPendingUpdates(): void {
       try {
         switch (update.type) {
           case "wiki_create": {
-            const { slug, section, title, content } = update.data;
+            const { slug, section, title, content, author } = update.data;
             if (!slug?.trim() || !title?.trim()) break;
             const validSection = VALID_WIKI_SECTIONS.includes(
               section as WikiSection
@@ -319,18 +336,22 @@ function flushPendingUpdates(): void {
               title,
               section: validSection,
               content: content || "",
-              created_by: "ceo",
+              created_by: author || "ceo",
+              session_id: lastSessionId || undefined,
             });
+            if (!createdSlugsThisSession.includes(slug)) {
+              createdSlugsThisSession.push(slug);
+            }
             break;
           }
           case "wiki_update": {
-            const { slug, content, title } = update.data;
+            const { slug, content, title, author } = update.data;
             if (!slug?.trim()) break;
             const fields: Record<string, string> = {};
             if (content) fields.content = content;
             if (title) fields.title = title;
             if (Object.keys(fields).length > 0) {
-              km.updateArticle(slug, { ...fields, updated_by: "ceo" });
+              km.updateArticle(slug, { ...fields, updated_by: author || "ceo" });
             }
             break;
           }
@@ -425,7 +446,7 @@ registerMessageHandler("knowledge-actions", (msg, config) => {
 
   // Parse structured KNOWLEDGE:: markers
   const wikiCreateMatches = text.matchAll(
-    /KNOWLEDGE::WIKI_CREATE\s+slug="([^"]+)"\s+section=(\S+)\s+title="([^"]+)"\s+content="([^"]+)"/g
+    /KNOWLEDGE::WIKI_CREATE\s+slug="([^"]+)"\s+section=(\S+)\s+title="([^"]+)"(?:\s+author=(\S+))?\s+content="([^"]+)"/g
   );
   for (const match of wikiCreateMatches) {
     queueUpdate(
@@ -435,7 +456,8 @@ registerMessageHandler("knowledge-actions", (msg, config) => {
           slug: match[1],
           section: match[2],
           title: match[3],
-          content: match[4],
+          author: match[4] || "",
+          content: match[5],
         },
       },
       lastProjectDir
@@ -443,13 +465,13 @@ registerMessageHandler("knowledge-actions", (msg, config) => {
   }
 
   const wikiUpdateMatches = text.matchAll(
-    /KNOWLEDGE::WIKI_UPDATE\s+slug="([^"]+)"\s+content="([^"]+)"/g
+    /KNOWLEDGE::WIKI_UPDATE\s+slug="([^"]+)"(?:\s+author=(\S+))?\s+content="([^"]+)"/g
   );
   for (const match of wikiUpdateMatches) {
     queueUpdate(
       {
         type: "wiki_update",
-        data: { slug: match[1], content: match[2] },
+        data: { slug: match[1], author: match[2] || "", content: match[3] },
       },
       lastProjectDir
     );
