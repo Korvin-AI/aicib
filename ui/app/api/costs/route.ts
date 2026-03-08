@@ -12,7 +12,69 @@ interface CostEntryRow {
   input_tokens: number;
   output_tokens: number;
   estimated_cost_usd: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
   timestamp: string;
+}
+
+interface CacheTotals {
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+}
+
+function queryCacheSavings(
+  db: ReturnType<typeof getDb>,
+  whereClause: string
+): { cacheReadTokens: number; cacheCreationTokens: number; estimatedSavingsUsd: number } {
+  const DEFAULT_INPUT_RATE = 3.0; // Sonnet rate
+  const hasCacheColumns = columnExists(db, "cost_entries", "cache_read_tokens");
+
+  if (!hasCacheColumns) {
+    return { cacheReadTokens: 0, cacheCreationTokens: 0, estimatedSavingsUsd: 0 };
+  }
+
+  const result = safeGet<CacheTotals>(
+    db,
+    "cost_entries",
+    `SELECT COALESCE(SUM(cache_read_tokens), 0) as cacheReadTokens,
+            COALESCE(SUM(cache_creation_tokens), 0) as cacheCreationTokens
+     FROM cost_entries ${whereClause}`
+  ) ?? { cacheReadTokens: 0, cacheCreationTokens: 0 };
+
+  return {
+    ...result,
+    estimatedSavingsUsd: (result.cacheReadTokens / 1_000_000) * DEFAULT_INPUT_RATE * 0.9,
+  };
+}
+
+const ALLOWED_TABLES = new Set(["cost_entries", "background_jobs", "sessions", "agent_status"]);
+
+function columnExists(db: ReturnType<typeof getDb>, table: string, column: string): boolean {
+  if (!ALLOWED_TABLES.has(table)) return false;
+  try {
+    const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+    return rows.some((r) => r.name === column);
+  } catch {
+    return false;
+  }
+}
+
+function queryAverageBriefCost(db: ReturnType<typeof getDb>): number | null {
+  if (!tableExists(db, "background_jobs")) return null;
+  const result = safeGet<{ avg_cost: number | null }>(
+    db,
+    "background_jobs",
+    `SELECT AVG(total_cost_usd) as avg_cost
+     FROM (
+       SELECT total_cost_usd FROM background_jobs
+       WHERE status = 'completed'
+         AND directive LIKE '[foreground]%'
+         AND total_cost_usd > 0
+       ORDER BY completed_at DESC
+       LIMIT 20
+     )`
+  );
+  return result?.avg_cost ?? null;
 }
 
 function buildDateRange(days: number): string[] {
@@ -34,6 +96,8 @@ export async function GET(request: Request) {
     const pageInfo = parsePagination(request, { pageSize: 50, maxPageSize: 200 });
     const hasCosts = tableExists(db, "cost_entries");
 
+    const zeroCacheSavings = { cacheReadTokens: 0, cacheCreationTokens: 0, estimatedSavingsUsd: 0 };
+
     if (!hasCosts) {
       return NextResponse.json({
         today: { total: 0, limit: config.settings.costLimitDaily },
@@ -43,6 +107,12 @@ export async function GET(request: Request) {
         byAgent: [],
         monthlyHistory: [],
         recentEntries: [],
+        cacheSavings: {
+          today: zeroCacheSavings,
+          month: zeroCacheSavings,
+          allTime: zeroCacheSavings,
+        },
+        averageBriefCost: null,
         pagination: {
           page: pageInfo.page,
           pageSize: pageInfo.pageSize,
@@ -130,6 +200,15 @@ export async function GET(request: Request) {
       [pageInfo.pageSize, pageInfo.offset]
     );
 
+    // Cache savings
+    const cacheSavings = {
+      today: queryCacheSavings(db, "WHERE date(timestamp) = date('now')"),
+      month: queryCacheSavings(db, "WHERE strftime('%Y-%m', timestamp) = strftime('%Y-%m', 'now')"),
+      allTime: queryCacheSavings(db, ""),
+    };
+
+    const averageBriefCost = queryAverageBriefCost(db);
+
     return NextResponse.json({
       today: {
         total: Number(today.toFixed(4)),
@@ -144,6 +223,8 @@ export async function GET(request: Request) {
       byAgent,
       monthlyHistory,
       recentEntries,
+      cacheSavings,
+      averageBriefCost,
       pagination: {
         page: pageInfo.page,
         pageSize: pageInfo.pageSize,

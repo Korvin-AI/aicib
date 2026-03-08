@@ -114,8 +114,40 @@ export async function costCommand(options: CostOptions): Promise<void> {
       `    Today:  ${dailyClr(formatUSD(todayCost, 2))} / $${config.settings.cost_limit_daily} (${formatPercent(todayCost, config.settings.cost_limit_daily)})`
     );
     console.log(
-      `    Month:  ${monthlyClr(formatUSD(monthCost, 2))} / $${config.settings.cost_limit_monthly} (${formatPercent(monthCost, config.settings.cost_limit_monthly)})\n`
+      `    Month:  ${monthlyClr(formatUSD(monthCost, 2))} / $${config.settings.cost_limit_monthly} (${formatPercent(monthCost, config.settings.cost_limit_monthly)})`
     );
+
+    // Cache savings
+    const savingsToday = costTracker.getCacheSavingsToday();
+    const savingsMonth = costTracker.getCacheSavingsThisMonth();
+
+    if (savingsToday.cacheReadTokens > 0 || savingsMonth.cacheReadTokens > 0) {
+      console.log(chalk.bold("\n  Cache Savings:"));
+
+      if (savingsToday.cacheReadTokens > 0) {
+        console.log(
+          chalk.green(
+            `    Today:  ~${formatUSD(savingsToday.estimatedSavingsUsd, 2)} saved (${savingsToday.cacheReadTokens.toLocaleString()} tokens served from cache)`
+          )
+        );
+      }
+      if (savingsMonth.cacheReadTokens > 0) {
+        console.log(
+          chalk.green(
+            `    Month:  ~${formatUSD(savingsMonth.estimatedSavingsUsd, 2)} saved (${savingsMonth.cacheReadTokens.toLocaleString()} tokens served from cache)`
+          )
+        );
+      }
+    }
+
+    // Average brief cost
+    const avgBriefCost = costTracker.getAverageBriefCost();
+    if (avgBriefCost !== null) {
+      console.log(
+        chalk.dim(`\n  Average brief cost: ${formatUSD(avgBriefCost)}`)
+      );
+    }
+    console.log();
 
     costTracker.close();
   } catch (error) {

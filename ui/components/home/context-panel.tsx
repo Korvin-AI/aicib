@@ -14,6 +14,7 @@ interface HomeContextData {
     month?: number;
     dailyLimit?: number;
     monthlyLimit?: number;
+    cacheSavingsMonth?: number;
   };
   recentJobs?: Array<{
     id: number;
@@ -81,6 +82,11 @@ export function ContextPanel({ loading, data }: ContextPanelProps) {
           <p className="text-[12px] text-foreground">
             Month: {formatCurrency(costs.month)} / {formatCurrency(costs.monthlyLimit)}
           </p>
+          {(costs.cacheSavingsMonth ?? 0) > 0.001 ? (
+            <p className="text-[12px] text-emerald-600">
+              Cache savings: ~{formatCurrency(costs.cacheSavingsMonth)} this month
+            </p>
+          ) : null}
         </section>
 
         <section className="rounded border border-border/70 bg-background p-2">

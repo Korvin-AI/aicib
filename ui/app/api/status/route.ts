@@ -153,6 +153,27 @@ export async function GET() {
         )
       : [];
 
+    // Cache savings for cost snapshot
+    let cacheSavingsMonth = 0;
+    if (tableExists(db, "cost_entries")) {
+      try {
+        const rows = db.prepare(`PRAGMA table_info(cost_entries)`).all() as Array<{ name: string }>;
+        if (rows.some((r) => r.name === "cache_read_tokens")) {
+          const result = safeGet<{ total: number }>(
+            db,
+            "cost_entries",
+            `SELECT COALESCE(SUM(cache_read_tokens), 0) as total
+             FROM cost_entries
+             WHERE strftime('%Y-%m', timestamp) = strftime('%Y-%m', 'now')`
+          );
+          const cacheReadTokens = result?.total ?? 0;
+          cacheSavingsMonth = (cacheReadTokens / 1_000_000) * 3.0 * 0.9;
+        }
+      } catch {
+        // Cache columns may not exist yet — ignore
+      }
+    }
+
     return NextResponse.json({
       company: config.company,
       session: activeSession
@@ -168,6 +189,7 @@ export async function GET() {
         month: monthCost,
         dailyLimit: config.settings.costLimitDaily,
         monthlyLimit: config.settings.costLimitMonthly,
+        cacheSavingsMonth,
       },
       tasks: taskCounts,
       recentLogs,

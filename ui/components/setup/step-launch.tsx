@@ -118,6 +118,27 @@ function getSevenDayPlan(challenge: string): string {
   return steps.map((s, i) => `Day ${i + 1}: ${s}`).join("\n");
 }
 
+function estimateBriefCost(agents: AgentConfig[]): string {
+  // Estimate based on team model configuration
+  const ceo = agents.find((a) => a.role === "ceo");
+  const workers = agents.flatMap((a) => a.workers ?? []);
+  const ceoModel = ceo?.model ?? "opus";
+  const workerModels = workers.map((w) => w.model);
+
+  const hasOpusCeo = ceoModel === "opus";
+  const hasHaikuWorkers = workerModels.some((m) => m === "haiku");
+  const hasSonnetWorkers = workerModels.some((m) => m === "sonnet");
+
+  if (hasOpusCeo && hasSonnetWorkers && !hasHaikuWorkers) {
+    return "~$1.20";
+  } else if (!hasOpusCeo && hasHaikuWorkers) {
+    return "~$0.40";
+  } else if (hasOpusCeo) {
+    return "~$1.00";
+  }
+  return "~$0.80";
+}
+
 export function StepLaunch({
   config,
   defaultAgents,
@@ -294,6 +315,12 @@ export function StepLaunch({
             </span>
             <span className="text-foreground">
               {questionsAnswered} of 10 questions
+            </span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Est. cost per brief</span>
+            <span className="font-medium text-foreground">
+              {estimateBriefCost(defaultAgents)}
             </span>
           </div>
         </div>

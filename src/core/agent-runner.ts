@@ -631,6 +631,9 @@ export function recordRunCosts(
       const tier = getModelTier(modelId);
       const label = `${agentRole}-${tier}`;
 
+      const cacheRead = usage.cacheReadInputTokens || 0;
+      const cacheCreation = usage.cacheCreationInputTokens || 0;
+
       // Prefer SDK-reported actual cost when available.
       // We use > 0 rather than >= 0 because costUSD === 0 typically means the
       // SDK didn't report cost for this model, not that the call was free.
@@ -642,7 +645,9 @@ export function recordRunCosts(
           modelId,
           usage.inputTokens,
           usage.outputTokens,
-          usage.costUSD
+          usage.costUSD,
+          cacheRead,
+          cacheCreation
         );
       } else {
         costTracker.recordCost(
@@ -650,7 +655,9 @@ export function recordRunCosts(
           sessionId,
           modelId,
           usage.inputTokens,
-          usage.outputTokens
+          usage.outputTokens,
+          cacheRead,
+          cacheCreation
         );
       }
     }

@@ -17,7 +17,15 @@ interface CostEntry {
   input_tokens: number;
   output_tokens: number;
   estimated_cost_usd: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
   timestamp: string;
+}
+
+interface CacheSavingsData {
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  estimatedSavingsUsd: number;
 }
 
 interface CostsPayload {
@@ -28,6 +36,12 @@ interface CostsPayload {
   byAgent: Array<{ agent: string; total: number }>;
   monthlyHistory: Array<{ month: string; total: number }>;
   recentEntries: CostEntry[];
+  cacheSavings?: {
+    today: CacheSavingsData;
+    month: CacheSavingsData;
+    allTime: CacheSavingsData;
+  };
+  averageBriefCost?: number | null;
 }
 
 export default function CostsPage() {
@@ -107,6 +121,14 @@ export default function CostsPage() {
         headerClassName: "text-right",
         render: (row) => formatCurrency(row.estimated_cost_usd),
       },
+      {
+        key: "cache_read_tokens",
+        label: "Cache Read",
+        sortable: true,
+        className: "text-right",
+        headerClassName: "text-right",
+        render: (row) => (row.cache_read_tokens ? formatNumber(row.cache_read_tokens) : "-"),
+      },
     ],
     []
   );
@@ -121,6 +143,8 @@ export default function CostsPage() {
       "input_tokens",
       "output_tokens",
       "estimated_cost_usd",
+      "cache_read_tokens",
+      "cache_creation_tokens",
     ];
 
     const lines = data.recentEntries.map((entry) =>
@@ -131,6 +155,8 @@ export default function CostsPage() {
         entry.input_tokens,
         entry.output_tokens,
         entry.estimated_cost_usd,
+        entry.cache_read_tokens ?? 0,
+        entry.cache_creation_tokens ?? 0,
       ]
         .map((value) => `"${String(value).replaceAll('"', '""')}"`)
         .join(",")
@@ -171,7 +197,7 @@ export default function CostsPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Today's Spend"
           value={loading || !data ? "--" : formatCurrency(data.today.total)}
@@ -190,6 +216,22 @@ export default function CostsPage() {
           label="All-Time Spend"
           value={loading || !data ? "--" : formatCurrency(data.allTime)}
           secondary="Accumulated total"
+        />
+        <StatCard
+          label="Saved by Caching (est.)"
+          value={
+            loading || !data
+              ? "--"
+              : `~${formatCurrency(data.cacheSavings?.month.estimatedSavingsUsd ?? 0)}`
+          }
+          secondary={
+            loading || !data
+              ? ""
+              : data.cacheSavings?.month.cacheReadTokens
+                ? `${formatNumber(data.cacheSavings.month.cacheReadTokens)} tokens from cache this month`
+                : "No cache data yet"
+          }
+          trend="up"
         />
       </div>
 
