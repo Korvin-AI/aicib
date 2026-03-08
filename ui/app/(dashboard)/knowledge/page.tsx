@@ -1,5 +1,7 @@
 "use client";
 
+import { useUIPreferences } from "@/lib/ui-preferences";
+import { SimpleDocuments } from "@/components/simple/simple-documents";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Search,
@@ -56,7 +58,7 @@ const SECTION_ICONS: Record<string, typeof FileText> = {
   drafts: PenLine,
 };
 
-export default function KnowledgePage() {
+function ProKnowledgePage() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [sections, setSections] = useState<Array<{ section: string; count: number }>>([]);
   const [archives, setArchives] = useState<Archive[]>([]);
@@ -138,7 +140,6 @@ export default function KnowledgePage() {
         return;
       }
       setScanMessage(`Imported ${data.imported} file(s), skipped ${data.skipped}.`);
-      // Reload articles
       const entries = await loadArticles();
       if (entries && entries.length > 0 && !selectedId) {
         setSelectedId(Number(entries[0].id));
@@ -366,4 +367,14 @@ export default function KnowledgePage() {
       </div>
     </div>
   );
+}
+
+export default function KnowledgePage() {
+  const { uiMode } = useUIPreferences();
+
+  if (uiMode === "simple") {
+    return <SimpleDocuments />;
+  }
+
+  return <ProKnowledgePage />;
 }

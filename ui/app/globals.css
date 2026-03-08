@@ -115,6 +115,63 @@
   }
 }
 
+/* ── Simple Mode Design Tokens ── */
+:root {
+  --s-status-success: #10B981;
+  --s-status-success-light: #D1FAE5;
+  --s-status-warning: #F59E0B;
+  --s-status-warning-light: #FEF3C7;
+  --s-status-info: #3B82F6;
+  --s-status-info-light: #DBEAFE;
+  --s-status-error: #EF4444;
+  --s-status-error-light: #FEE2E2;
+
+  --s-surface-primary: #F9FAFB;
+  --s-surface-elevated: #FFFFFF;
+
+  --s-border-light: #E5E7EB;
+  --s-border-default: #D1D5DB;
+
+  --s-text-primary: #111827;
+  --s-text-secondary: #6B7280;
+  --s-text-tertiary: #9CA3AF;
+
+  --s-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --s-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  --s-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+}
+
+@keyframes s-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes s-slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes s-live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.s-card {
+  background: var(--s-surface-elevated);
+  border: 1px solid var(--s-border-light);
+  border-radius: 12px;
+  box-shadow: var(--s-shadow-sm);
+}
+
+.s-live-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--s-status-success);
+  animation: s-live-pulse 2s ease-in-out infinite;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

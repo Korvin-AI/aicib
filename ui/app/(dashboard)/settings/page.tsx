@@ -1,8 +1,11 @@
 "use client";
 
+import { useUIPreferences } from "@/lib/ui-preferences";
+import { SimpleSettings } from "@/components/simple/simple-settings";
 import { useEffect, useMemo, useState } from "react";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { StatCard } from "@/components/stat-card";
+import { Switch } from "@/components/ui/switch";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 
 interface SettingsPayload {
@@ -40,7 +43,8 @@ interface SettingsPayload {
   companyEvents: Record<string, unknown>[];
 }
 
-export default function SettingsPage() {
+function ProSettingsPage() {
+  const { uiMode, setUiMode } = useUIPreferences();
   const [data, setData] = useState<SettingsPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -247,7 +251,7 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      <section className="rounded-lg border border-border/80 bg-card p-3">
+      <section className="mb-4 rounded-lg border border-border/80 bg-card p-3">
         <h2 className="mb-2 text-[13px] font-medium">Company Events</h2>
         <DataTable
           rows={data?.companyEvents || []}
@@ -257,6 +261,32 @@ export default function SettingsPage() {
           getRowKey={(row, index) => String(row.id || index)}
         />
       </section>
+
+      {/* UI Mode Toggle */}
+      <section className="mb-4 rounded-lg border-2 border-primary/20 bg-card p-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-[13px] font-medium">Simple Mode</h2>
+            <p className="mt-0.5 text-[12px] text-muted-foreground">
+              Switch to the simplified 4-page dashboard
+            </p>
+          </div>
+          <Switch
+            checked={uiMode === "simple"}
+            onCheckedChange={(checked) => setUiMode(checked ? "simple" : "pro")}
+          />
+        </div>
+      </section>
     </div>
   );
+}
+
+export default function SettingsPage() {
+  const { uiMode } = useUIPreferences();
+
+  if (uiMode === "simple") {
+    return <SimpleSettings />;
+  }
+
+  return <ProSettingsPage />;
 }

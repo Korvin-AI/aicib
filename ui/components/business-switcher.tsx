@@ -8,7 +8,6 @@ import {
   ChevronDown,
   Loader2,
   Plus,
-  FolderPlus,
   Trash2,
 } from "lucide-react";
 import {
@@ -19,7 +18,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { BusinessImportDialog } from "@/components/business-import-dialog";
 import { BusinessDeleteDialog } from "@/components/business-delete-dialog";
 
 interface BusinessListItem {
@@ -41,7 +39,6 @@ export function BusinessSwitcher() {
   const [data, setData] = useState<BusinessesPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [switchingId, setSwitchingId] = useState<string | null>(null);
-  const [importOpen, setImportOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string;
     name: string;
@@ -173,18 +170,8 @@ export function BusinessSwitcher() {
             <Plus className="h-3.5 w-3.5" />
             Create New Business
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => setImportOpen(true)} className="gap-2">
-            <FolderPlus className="h-3.5 w-3.5" />
-            Import Existing Business
-          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-
-      <BusinessImportDialog
-        open={importOpen}
-        onOpenChange={setImportOpen}
-        onImported={() => window.location.reload()}
-      />
 
       <BusinessDeleteDialog
         open={deleteTarget !== null}

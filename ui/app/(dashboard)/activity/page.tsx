@@ -1,9 +1,11 @@
 "use client";
 
+import { useUIPreferences } from "@/lib/ui-preferences";
+import { SimpleActivityLog } from "@/components/simple/simple-activity-log";
 import { ActivityStream } from "@/components/activity-stream";
 import { PageGuide } from "@/components/page-guide";
 
-export default function ActivityPage() {
+function ProActivityPage() {
   return (
     <div className="flex h-full flex-col overflow-hidden px-5 py-4">
       <h1 className="text-lg font-semibold tracking-tight">Activity</h1>
@@ -23,4 +25,14 @@ export default function ActivityPage() {
       </p>
     </div>
   );
+}
+
+export default function ActivityPage() {
+  const { uiMode } = useUIPreferences();
+
+  if (uiMode === "simple") {
+    return <SimpleActivityLog />;
+  }
+
+  return <ProActivityPage />;
 }

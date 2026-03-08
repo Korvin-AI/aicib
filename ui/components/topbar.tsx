@@ -6,9 +6,11 @@ import { useSSE } from "@/components/sse-provider";
 import { BusinessStopDialog } from "@/components/business-stop-dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useUIPreferences } from "@/lib/ui-preferences";
 
 export function Topbar() {
   const { connected, lastEvent } = useSSE();
+  const { uiMode, setUiMode } = useUIPreferences();
   const [companyName, setCompanyName] = useState("AICIB");
   const [sessionActive, setSessionActive] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -83,6 +85,14 @@ export function Topbar() {
       </div>
 
       <div className="flex items-center gap-3">
+        {uiMode === "pro" && (
+          <button
+            onClick={() => setUiMode("simple")}
+            className="text-[11px] text-muted-foreground/50 transition-colors hover:text-primary"
+          >
+            Simple View
+          </button>
+        )}
         <div
           className={cn(
             "flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]",

@@ -1,5 +1,7 @@
 "use client";
 
+import { useUIPreferences } from "@/lib/ui-preferences";
+import { SimpleOverview } from "@/components/simple/simple-overview";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
@@ -49,7 +51,7 @@ interface RefreshOptions {
   showLoading?: boolean;
 }
 
-export default function DashboardPage() {
+function ProHomePage() {
   const router = useRouter();
   const { lastEvent, connected } = useSSE();
 
@@ -377,4 +379,14 @@ export default function DashboardPage() {
       </div>
     </div>
   );
+}
+
+export default function DashboardPage() {
+  const { uiMode } = useUIPreferences();
+
+  if (uiMode === "simple") {
+    return <SimpleOverview />;
+  }
+
+  return <ProHomePage />;
 }
