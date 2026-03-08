@@ -11,6 +11,7 @@ import {
 import { validateBody } from '../middleware/validate';
 import { updateArticleSchema } from '../schemas/knowledge';
 import { notFoundError, notImplementedError } from '../utils/errors';
+import { requireRole } from '../middleware/rbac';
 import type { TenantContext } from '../types';
 
 const knowledge = new Hono<{ Variables: { tenant: TenantContext } }>();
@@ -62,7 +63,7 @@ knowledge.put('/:id', validateBody(updateArticleSchema), async (c) => {
   return c.json({ article: updated });
 });
 
-knowledge.delete('/:id', async (c) => {
+knowledge.delete('/:id', requireRole('admin'), async (c) => {
   const { businessId } = c.get('tenant');
   const id = parseInt(c.req.param('id'), 10);
   if (isNaN(id)) throw notFoundError('Invalid article ID');

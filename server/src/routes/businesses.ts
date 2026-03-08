@@ -11,6 +11,7 @@ import {
   selectBusinessSchema,
 } from '../schemas/businesses';
 import { notFoundError } from '../utils/errors';
+import { requireRole } from '../middleware/rbac';
 import type { AuthContext } from '../types';
 
 // Org-scoped routes — no tenantMiddleware, just authMiddleware
@@ -22,14 +23,14 @@ businessesRoute.get('/', async (c) => {
   return c.json({ businesses: data });
 });
 
-businessesRoute.post('/', validateBody(createBusinessSchema), async (c) => {
+businessesRoute.post('/', requireRole('admin'), validateBody(createBusinessSchema), async (c) => {
   const { orgId } = c.get('auth');
   const body = c.req.valid('json');
   const biz = await createBusiness(orgId, body);
   return c.json({ success: true, business: biz }, 201);
 });
 
-businessesRoute.post('/delete', validateBody(deleteBusinessSchema), async (c) => {
+businessesRoute.post('/delete', requireRole('admin'), validateBody(deleteBusinessSchema), async (c) => {
   const { orgId } = c.get('auth');
   const { businessId } = c.req.valid('json');
   const deleted = await deleteBusiness(orgId, businessId);

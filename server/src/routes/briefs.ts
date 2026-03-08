@@ -13,6 +13,7 @@ import { tenantValues } from '../repositories/tenant-helpers';
 import { getBriefQueue } from '../workers/brief-worker';
 import { createSSEStream } from '../realtime/sse-handler';
 import { jobChannel } from '../realtime/redis';
+import { requireRole } from '../middleware/rbac';
 import type { TenantContext } from '../types';
 
 const briefs = new Hono<{ Variables: { tenant: TenantContext } }>();
@@ -21,8 +22,8 @@ const submitSchema = z.object({
   directive: z.string().min(1).max(50_000),
 });
 
-// POST / — Submit a brief
-briefs.post('/', async (c) => {
+// POST / — Submit a brief (member+)
+briefs.post('/', requireRole('member'), async (c) => {
   const { orgId, businessId } = c.get('tenant');
 
   let body: unknown;
