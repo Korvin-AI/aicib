@@ -32,7 +32,7 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
     if (apiKey) {
       // Check expiry
       if (apiKey.expiresAt && apiKey.expiresAt < new Date()) {
-        return c.json({ error: 'API key expired' }, 401);
+        return c.json({ error: 'API key expired', code: 'UNAUTHORIZED' as const }, 401);
       }
 
       // Update last used
@@ -80,5 +80,5 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
     }
   }
 
-  return c.json({ error: 'Authentication required' }, 401);
+  return c.json({ error: 'Authentication required', code: 'UNAUTHORIZED' as const }, 401);
 });

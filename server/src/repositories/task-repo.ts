@@ -2,6 +2,112 @@ import { eq, and, sql, desc } from 'drizzle-orm';
 import { db } from '../db/connection';
 import { tasks, taskBlockers, taskComments } from '../db/schema/index';
 
+export async function getTask(businessId: string, taskId: number) {
+  const [[taskRow], blockerRows, commentRows, subtaskRows] = await Promise.all([
+    db
+      .select({
+        id: tasks.id,
+        title: tasks.title,
+        description: tasks.description,
+        status: tasks.status,
+        priority: tasks.priority,
+        assignee: tasks.assignee,
+        reviewer: tasks.reviewer,
+        department: tasks.department,
+        project: tasks.project,
+        parentId: tasks.parentId,
+        deadline: tasks.deadline,
+        createdBy: tasks.createdBy,
+        sessionId: tasks.sessionId,
+        createdAt: tasks.createdAt,
+        updatedAt: tasks.updatedAt,
+        completedAt: tasks.completedAt,
+        outputSummary: tasks.outputSummary,
+        blocker_count: sql<number>`(SELECT COUNT(*)::int FROM ${taskBlockers} WHERE ${taskBlockers.taskId} = ${taskId} AND ${taskBlockers.businessId} = ${businessId})`,
+        comment_count: sql<number>`(SELECT COUNT(*)::int FROM ${taskComments} WHERE ${taskComments.taskId} = ${taskId} AND ${taskComments.businessId} = ${businessId})`,
+      })
+      .from(tasks)
+      .where(and(eq(tasks.businessId, businessId), eq(tasks.id, taskId)))
+      .limit(1),
+    db
+      .select({
+        blocker_id: taskBlockers.blockerId,
+        title: tasks.title,
+        status: tasks.status,
+        priority: tasks.priority,
+      })
+      .from(taskBlockers)
+      .innerJoin(tasks, eq(taskBlockers.blockerId, tasks.id))
+      .where(and(eq(taskBlockers.businessId, businessId), eq(taskBlockers.taskId, taskId))),
+    db
+      .select({
+        id: taskComments.id,
+        author: taskComments.author,
+        content: taskComments.content,
+        comment_type: taskComments.commentType,
+        created_at: taskComments.createdAt,
+      })
+      .from(taskComments)
+      .where(and(eq(taskComments.businessId, businessId), eq(taskComments.taskId, taskId)))
+      .orderBy(taskComments.createdAt),
+    db
+      .select({
+        id: tasks.id,
+        title: tasks.title,
+        status: tasks.status,
+        priority: tasks.priority,
+        assignee: tasks.assignee,
+        updated_at: tasks.updatedAt,
+      })
+      .from(tasks)
+      .where(and(eq(tasks.businessId, businessId), eq(tasks.parentId, taskId)))
+      .orderBy(desc(tasks.updatedAt)),
+  ]);
+
+  if (!taskRow) return null;
+  return { task: taskRow, blockers: blockerRows, comments: commentRows, subtasks: subtaskRows };
+}
+
+export async function updateTask(
+  businessId: string,
+  taskId: number,
+  updates: Partial<{
+    title: string;
+    description: string;
+    status: string;
+    priority: string;
+    assignee: string | null;
+    reviewer: string | null;
+    department: string | null;
+    project: string | null;
+    deadline: string | null;
+    outputSummary: string | null;
+  }>,
+) {
+  const setValues: Record<string, unknown> = { updatedAt: new Date() };
+  if (updates.title !== undefined) setValues.title = updates.title;
+  if (updates.description !== undefined) setValues.description = updates.description;
+  if (updates.status !== undefined) {
+    setValues.status = updates.status;
+    if (updates.status === 'done') setValues.completedAt = new Date();
+  }
+  if (updates.priority !== undefined) setValues.priority = updates.priority;
+  if (updates.assignee !== undefined) setValues.assignee = updates.assignee;
+  if (updates.reviewer !== undefined) setValues.reviewer = updates.reviewer;
+  if (updates.department !== undefined) setValues.department = updates.department;
+  if (updates.project !== undefined) setValues.project = updates.project;
+  if (updates.deadline !== undefined) setValues.deadline = updates.deadline ? new Date(updates.deadline) : null;
+  if (updates.outputSummary !== undefined) setValues.outputSummary = updates.outputSummary;
+
+  const [updated] = await db
+    .update(tasks)
+    .set(setValues)
+    .where(and(eq(tasks.businessId, businessId), eq(tasks.id, taskId)))
+    .returning();
+
+  return updated ?? null;
+}
+
 interface TaskFilters {
   status?: string;
   priority?: string;

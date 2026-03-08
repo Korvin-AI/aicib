@@ -2,6 +2,34 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db/connection';
 import { organizations, orgMemberships } from '../db/schema/index';
 
+// Cached org plan lookup (60s TTL)
+const planCache = new Map<string, { plan: string; expiresAt: number }>();
+
+// Periodic cleanup to prevent memory leaks from expired entries
+const cacheCleanupTimer = setInterval(() => {
+  const now = Date.now();
+  for (const [orgId, entry] of planCache) {
+    if (entry.expiresAt <= now) planCache.delete(orgId);
+  }
+}, 5 * 60_000);
+cacheCleanupTimer.unref();
+
+export async function getOrgPlan(orgId: string): Promise<string> {
+  const now = Date.now();
+  const cached = planCache.get(orgId);
+  if (cached && cached.expiresAt > now) return cached.plan;
+
+  const [org] = await db
+    .select({ plan: organizations.plan })
+    .from(organizations)
+    .where(eq(organizations.id, orgId))
+    .limit(1);
+
+  const plan = org?.plan ?? 'free';
+  planCache.set(orgId, { plan, expiresAt: now + 60_000 });
+  return plan;
+}
+
 export async function createOrganization(name: string, slug: string) {
   const [org] = await db
     .insert(organizations)
