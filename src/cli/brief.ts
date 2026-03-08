@@ -223,6 +223,9 @@ export async function briefCommand(
       // Set CEO status to working
       costTracker.setAgentStatus("ceo", "working", directive.slice(0, 100));
 
+      // Map tool_use_id → agent role for resolving subagent roles from Task delegations
+      const toolUseToRole = new Map<string, string>();
+
       const result = await sendBrief(
         activeSession.sdkSessionId,
         directive,
@@ -235,12 +238,30 @@ export async function briefCommand(
             console.log(`  ${formatted}`);
           }
 
+          // Build tool_use_id → role map from Task delegations in assistant messages
+          if (msg.type === "assistant" && msg.message?.content) {
+            for (const block of msg.message.content) {
+              if (
+                typeof block === "object" && block !== null &&
+                "type" in block && (block as { type: string }).type === "tool_use" &&
+                "name" in block && (block as { name: string }).name === "Task" &&
+                "id" in block && "input" in block
+              ) {
+                const tb = block as { id: string; input: Record<string, unknown> };
+                const agent = ((tb.input.subagent_type as string) || (tb.input.agent_name as string) || "").toLowerCase();
+                if (agent) toolUseToRole.set(tb.id, agent);
+              }
+            }
+          }
+
           // Save every displayable message to the log DB
           const plain = formatMessagePlain(msg);
           if (plain) {
             let role = "system";
             if (msg.type === "assistant") {
-              role = msg.parent_tool_use_id ? "subagent" : "ceo";
+              role = msg.parent_tool_use_id
+                ? (toolUseToRole.get(msg.parent_tool_use_id) || "subagent")
+                : "ceo";
             } else if (msg.type === "result") {
               role = "system";
             }
@@ -306,11 +327,24 @@ export async function briefCommand(
         config
       );
 
-      console.log(
-        chalk.dim(
-          `\n  Cost: ${formatUSD(result.totalCostUsd)} | Turns: ${result.numTurns} | Duration: ${(result.durationMs / 1000).toFixed(1)}s\n`
-        )
-      );
+      // Cost summary line
+      let costLine = `\n  Cost: ${formatUSD(result.totalCostUsd)} | Turns: ${result.numTurns} | Duration: ${(result.durationMs / 1000).toFixed(1)}s`;
+      console.log(chalk.dim(costLine));
+
+      // Cache savings context
+      const avgCost = costTracker.getAverageBriefCost();
+      const savingsToday = costTracker.getCacheSavingsToday();
+      const hints: string[] = [];
+      if (avgCost !== null) {
+        hints.push(`Your average brief costs ${formatUSD(avgCost)}`);
+      }
+      if (savingsToday.estimatedSavingsUsd > 0.001) {
+        hints.push(`caching saved ~${formatUSD(savingsToday.estimatedSavingsUsd, 2)} today`);
+      }
+      if (hints.length > 0) {
+        console.log(chalk.dim(`  (${hints.join(" — ")})`));
+      }
+      console.log();
     }
   } catch (error) {
     // Set CEO to error status and mark foreground job as failed

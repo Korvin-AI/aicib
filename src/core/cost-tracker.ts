@@ -10,7 +10,15 @@ export interface CostEntry {
   input_tokens: number;
   output_tokens: number;
   estimated_cost_usd: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
   timestamp: string;
+}
+
+export interface CacheSavings {
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  estimatedSavingsUsd: number;
 }
 
 export interface AgentCostSummary {
@@ -185,6 +193,7 @@ export class CostTracker {
       CREATE INDEX IF NOT EXISTS idx_bg_jobs_session ON background_jobs(session_id);
       CREATE INDEX IF NOT EXISTS idx_bg_jobs_status ON background_jobs(status);
       CREATE INDEX IF NOT EXISTS idx_bg_logs_job ON background_logs(job_id);
+      CREATE INDEX IF NOT EXISTS idx_bg_logs_agent ON background_logs(agent_role, id DESC);
 
       CREATE TABLE IF NOT EXISTS ceo_journal (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -202,6 +211,19 @@ export class CostTracker {
       CREATE INDEX IF NOT EXISTS idx_journal_created ON ceo_journal(created_at);
     `);
 
+    // Idempotent migration: add cache token columns to cost_entries
+    // SQLite throws if columns already exist, so we catch and ignore.
+    for (const col of [
+      "ALTER TABLE cost_entries ADD COLUMN cache_read_tokens INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE cost_entries ADD COLUMN cache_creation_tokens INTEGER NOT NULL DEFAULT 0",
+    ]) {
+      try {
+        this.db.exec(col);
+      } catch {
+        // Column already exists — expected after first run
+      }
+    }
+
     // Create tables registered by extensions/features
     for (const tableDef of tableRegistry) {
       this.db.exec(tableDef.createSQL);
@@ -218,19 +240,24 @@ export class CostTracker {
     sessionId: string,
     model: string,
     inputTokens: number,
-    outputTokens: number
+    outputTokens: number,
+    cacheReadTokens: number = 0,
+    cacheCreationTokens: number = 0
   ): void {
     const rates = getFallbackPricing(model);
+    // Cache write tokens are billed at a 25% premium over the input rate
+    const CACHE_WRITE_PREMIUM = 0.25;
     const cost =
       (inputTokens / 1_000_000) * rates.input +
-      (outputTokens / 1_000_000) * rates.output;
+      (outputTokens / 1_000_000) * rates.output +
+      (cacheCreationTokens / 1_000_000) * rates.input * CACHE_WRITE_PREMIUM;
 
     this.db
       .prepare(
-        `INSERT INTO cost_entries (agent_role, session_id, input_tokens, output_tokens, estimated_cost_usd)
-         VALUES (?, ?, ?, ?, ?)`
+        `INSERT INTO cost_entries (agent_role, session_id, input_tokens, output_tokens, estimated_cost_usd, cache_read_tokens, cache_creation_tokens)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(agentRole, sessionId, inputTokens, outputTokens, cost);
+      .run(agentRole, sessionId, inputTokens, outputTokens, cost, cacheReadTokens, cacheCreationTokens);
   }
 
   /**
@@ -243,14 +270,16 @@ export class CostTracker {
     _model: string,
     inputTokens: number,
     outputTokens: number,
-    actualCostUsd: number
+    actualCostUsd: number,
+    cacheReadTokens: number = 0,
+    cacheCreationTokens: number = 0
   ): void {
     this.db
       .prepare(
-        `INSERT INTO cost_entries (agent_role, session_id, input_tokens, output_tokens, estimated_cost_usd)
-         VALUES (?, ?, ?, ?, ?)`
+        `INSERT INTO cost_entries (agent_role, session_id, input_tokens, output_tokens, estimated_cost_usd, cache_read_tokens, cache_creation_tokens)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(agentRole, sessionId, inputTokens, outputTokens, actualCostUsd);
+      .run(agentRole, sessionId, inputTokens, outputTokens, actualCostUsd, cacheReadTokens, cacheCreationTokens);
   }
 
   getCostByAgent(sessionId?: string): AgentCostSummary[] {
@@ -658,6 +687,90 @@ export class CostTracker {
    */
   runOnRegisteredTable(sql: string, ...params: unknown[]): void {
     this.db.prepare(sql).run(...params);
+  }
+
+  // Cache savings queries
+
+  /**
+   * Cache savings for today. Estimates USD saved using Sonnet's input rate ($3/MTok)
+   * and the 90% discount for cache reads.
+   */
+  getCacheSavingsToday(): CacheSavings {
+    const result = this.db
+      .prepare(
+        `SELECT COALESCE(SUM(cache_read_tokens), 0) as cacheReadTokens,
+                COALESCE(SUM(cache_creation_tokens), 0) as cacheCreationTokens
+         FROM cost_entries
+         WHERE date(timestamp) = date('now')`
+      )
+      .get() as { cacheReadTokens: number; cacheCreationTokens: number };
+
+    const DEFAULT_INPUT_RATE = 3.0; // Sonnet rate as conservative default
+    const estimatedSavingsUsd =
+      (result.cacheReadTokens / 1_000_000) * DEFAULT_INPUT_RATE * 0.9;
+
+    return { ...result, estimatedSavingsUsd };
+  }
+
+  /**
+   * Cache savings for the current month.
+   */
+  getCacheSavingsThisMonth(): CacheSavings {
+    const result = this.db
+      .prepare(
+        `SELECT COALESCE(SUM(cache_read_tokens), 0) as cacheReadTokens,
+                COALESCE(SUM(cache_creation_tokens), 0) as cacheCreationTokens
+         FROM cost_entries
+         WHERE strftime('%Y-%m', timestamp) = strftime('%Y-%m', 'now')`
+      )
+      .get() as { cacheReadTokens: number; cacheCreationTokens: number };
+
+    const DEFAULT_INPUT_RATE = 3.0;
+    const estimatedSavingsUsd =
+      (result.cacheReadTokens / 1_000_000) * DEFAULT_INPUT_RATE * 0.9;
+
+    return { ...result, estimatedSavingsUsd };
+  }
+
+  /**
+   * Cache savings across all time.
+   */
+  getCacheSavingsAllTime(): CacheSavings {
+    const result = this.db
+      .prepare(
+        `SELECT COALESCE(SUM(cache_read_tokens), 0) as cacheReadTokens,
+                COALESCE(SUM(cache_creation_tokens), 0) as cacheCreationTokens
+         FROM cost_entries`
+      )
+      .get() as { cacheReadTokens: number; cacheCreationTokens: number };
+
+    const DEFAULT_INPUT_RATE = 3.0;
+    const estimatedSavingsUsd =
+      (result.cacheReadTokens / 1_000_000) * DEFAULT_INPUT_RATE * 0.9;
+
+    return { ...result, estimatedSavingsUsd };
+  }
+
+  /**
+   * Average cost per brief (foreground job) from completed jobs.
+   * Returns null if no completed foreground jobs exist.
+   */
+  getAverageBriefCost(limit: number = 20): number | null {
+    const result = this.db
+      .prepare(
+        `SELECT AVG(total_cost_usd) as avg_cost
+         FROM (
+           SELECT total_cost_usd FROM background_jobs
+           WHERE status = 'completed'
+             AND directive LIKE '[foreground]%'
+             AND total_cost_usd > 0
+           ORDER BY completed_at DESC
+           LIMIT ?
+         )`
+      )
+      .get(limit) as { avg_cost: number | null };
+
+    return result.avg_cost;
   }
 
   close(): void {

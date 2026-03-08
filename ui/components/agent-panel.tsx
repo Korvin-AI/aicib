@@ -56,6 +56,7 @@ interface AgentInsights {
     reviews: Array<Record<string, unknown>>;
   };
   journals: Array<Record<string, unknown>>;
+  recentLogs?: LogEntry[];
 }
 
 interface AgentPanelProps {
@@ -269,22 +270,27 @@ export function AgentPanel({
             <h4 className="mb-2 text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
               Recent Activity
             </h4>
-            {logs.length === 0 ? (
-              <p className="text-[13px] text-muted-foreground">No recent activity</p>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {logs.map((log) => (
-                  <div key={log.id} className="flex flex-col gap-0.5">
-                    <span className="text-[11px] text-muted-foreground">
-                      {formatRelativeTime(log.timestamp)}
-                    </span>
-                    <p className="text-[13px] leading-relaxed text-muted-foreground">
-                      {log.content}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
+            {(() => {
+              const activityLogs = (insights?.recentLogs && insights.recentLogs.length > 0)
+                ? insights.recentLogs
+                : logs;
+              return activityLogs.length === 0 ? (
+                <p className="text-[13px] text-muted-foreground">No recent activity</p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {activityLogs.map((log) => (
+                    <div key={log.id} className="flex flex-col gap-0.5">
+                      <span className="text-[11px] text-muted-foreground">
+                        {formatRelativeTime(log.timestamp)}
+                      </span>
+                      <p className="text-[13px] leading-relaxed text-muted-foreground">
+                        {log.content}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
         </div>
       </SheetContent>

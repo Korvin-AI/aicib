@@ -102,18 +102,22 @@ function createMessageCallback(
   prefix?: string
 ): (msg: EngineMessage) => void {
   return (msg: EngineMessage) => {
+    // Populate activeSubagents BEFORE resolving role so the map is up-to-date
+    trackSubagentStatus(msg, costTracker);
+
     const formatted = formatMessagePlain(msg);
     if (formatted) {
       let role = "system";
       if (msg.type === "assistant") {
-        role = msg.parent_tool_use_id ? "subagent" : "ceo";
+        role = msg.parent_tool_use_id
+          ? (activeSubagents.get(msg.parent_tool_use_id) || "subagent")
+          : "ceo";
       } else if (msg.type === "result") {
         role = "system";
       }
       const content = prefix ? `${prefix} ${formatted}` : formatted;
       costTracker.logBackgroundMessage(jobId, msg.type, role, content);
     }
-    trackSubagentStatus(msg, costTracker);
   };
 }
 
