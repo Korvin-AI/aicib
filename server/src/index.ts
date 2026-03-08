@@ -6,6 +6,7 @@ import { env } from './env';
 import { errorHandler } from './middleware/error-handler';
 import { authMiddleware } from './middleware/auth';
 import { tenantMiddleware } from './middleware/tenant';
+import { rateLimitMiddleware } from './middleware/rate-limit';
 import { health } from './routes/health';
 import { auth } from './routes/auth';
 import { status } from './routes/status';
@@ -13,8 +14,16 @@ import { agents } from './routes/agents';
 import { costs } from './routes/costs';
 import { tasksRoute } from './routes/tasks';
 import { journal } from './routes/journal';
+import { brief } from './routes/brief';
 import { briefs } from './routes/briefs';
+import { channels } from './routes/channels';
+import { hr } from './routes/hr';
+import { knowledge } from './routes/knowledge';
+import { projectsRoute } from './routes/projects';
+import { settings } from './routes/settings';
+import { setup } from './routes/setup';
 import { stream } from './routes/stream';
+import { businessesRoute } from './routes/businesses';
 import { startBriefWorker, closeBriefQueue } from './workers/brief-worker';
 import { closeRedis } from './realtime/redis';
 import { runMigrations } from './db/migrate';
@@ -36,17 +45,32 @@ app.onError(errorHandler);
 app.route('/', health);
 app.route('/', auth);
 
+// Org-scoped routes (auth only, no tenant)
+const orgRoutes = new Hono();
+orgRoutes.use('*', authMiddleware);
+orgRoutes.use('*', rateLimitMiddleware);
+orgRoutes.route('/businesses', businessesRoute);
+app.route('/', orgRoutes);
+
 // Protected business routes (auth + tenant)
 const businessRoutes = new Hono();
 businessRoutes.use('*', authMiddleware);
 businessRoutes.use('*', tenantMiddleware);
+businessRoutes.use('*', rateLimitMiddleware);
 
 businessRoutes.route('/status', status);
 businessRoutes.route('/agents', agents);
 businessRoutes.route('/costs', costs);
 businessRoutes.route('/tasks', tasksRoute);
 businessRoutes.route('/journal', journal);
+businessRoutes.route('/brief', brief);
 businessRoutes.route('/briefs', briefs);
+businessRoutes.route('/channels', channels);
+businessRoutes.route('/hr', hr);
+businessRoutes.route('/knowledge', knowledge);
+businessRoutes.route('/projects', projectsRoute);
+businessRoutes.route('/settings', settings);
+businessRoutes.route('/setup', setup);
 businessRoutes.route('/stream', stream);
 
 app.route('/businesses/:businessId', businessRoutes);

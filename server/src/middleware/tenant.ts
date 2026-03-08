@@ -14,7 +14,7 @@ type TenantEnv = {
 export const tenantMiddleware = createMiddleware<TenantEnv>(async (c, next) => {
   const businessId = c.req.param('businessId');
   if (!businessId) {
-    return c.json({ error: 'Business ID required' }, 400);
+    return c.json({ error: 'Business ID required', code: 'VALIDATION_ERROR' as const }, 400);
   }
 
   const auth = c.get('auth');
@@ -26,7 +26,7 @@ export const tenantMiddleware = createMiddleware<TenantEnv>(async (c, next) => {
     .limit(1);
 
   if (!business || business.orgId !== auth.orgId) {
-    return c.json({ error: 'Business not found' }, 404);
+    return c.json({ error: 'Business not found', code: 'NOT_FOUND' as const }, 404);
   }
 
   c.set('tenant', {

@@ -1,8 +1,21 @@
 import type { ErrorHandler } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { env } from '../env';
+import { AppError } from '../utils/errors';
 
 export const errorHandler: ErrorHandler = (err, c) => {
+  if (err instanceof AppError) {
+    if (err.status >= 500) console.error('Server error:', err);
+    return c.json(
+      {
+        error: err.message,
+        code: err.code,
+        ...(err.details ? { details: err.details } : {}),
+      },
+      err.status as ContentfulStatusCode,
+    );
+  }
+
   console.error('Unhandled error:', err);
 
   const statusCode = 'status' in err ? (err as { status: number }).status : 500;
@@ -13,5 +26,20 @@ export const errorHandler: ErrorHandler = (err, c) => {
         ? 'Internal server error'
         : err.message;
 
-  return c.json({ error: message }, statusCode as ContentfulStatusCode);
+  const code =
+    statusCode === 404
+      ? 'NOT_FOUND'
+      : statusCode === 401
+        ? 'UNAUTHORIZED'
+        : statusCode === 403
+          ? 'FORBIDDEN'
+          : statusCode === 409
+            ? 'CONFLICT'
+            : statusCode === 429
+              ? 'RATE_LIMITED'
+              : statusCode >= 500
+                ? 'INTERNAL_ERROR'
+                : 'VALIDATION_ERROR';
+
+  return c.json({ error: message, code }, statusCode as ContentfulStatusCode);
 };
