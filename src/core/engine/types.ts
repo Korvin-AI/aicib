@@ -81,6 +81,8 @@ export interface EngineQueryOptions {
   mcpServers?: Record<string, MCPServerConfig>;
   /** Restrict which tools the session can use (e.g., ["mcp__github__list_issues"]). */
   allowedTools?: string[];
+  /** Environment variables to pass to the engine process (e.g., ANTHROPIC_API_KEY). */
+  env?: Record<string, string>;
 }
 
 // Re-export the raw SDK types for the adapter layer only

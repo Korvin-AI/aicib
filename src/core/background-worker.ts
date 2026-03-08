@@ -36,6 +36,7 @@ import { CostTracker } from "./cost-tracker.js";
 import type { EngineMessage } from "./engine/index.js";
 import { getEngine } from "./engine/index.js";
 import { sendBrief, recordRunCosts, generateJournalEntry, formatMessagePlain } from "./agent-runner.js";
+import { resolveEngineEnv } from "./config.js";
 import { ProjectPlanner, type ProjectConfig, PROJECT_CONFIG_DEFAULTS } from "./project-planner.js";
 import { TaskManager } from "./task-manager.js";
 import { EventManager, type EventConfig, type ParticipantsConfig, EVENTS_CONFIG_DEFAULTS } from "./events.js";
@@ -158,7 +159,8 @@ async function runSingleBrief(
         result,
         projectDir,
         costTracker,
-        sessionId
+        sessionId,
+        config
       );
       costTracker.logBackgroundMessage(
         jobId,
@@ -263,6 +265,7 @@ async function runProjectLoop(
   const pp = new ProjectPlanner(projectDir);
   const projectsConfig = (config.extensions?.projects as ProjectConfig | undefined) ?? PROJECT_CONFIG_DEFAULTS;
   const startTime = Date.now();
+  const engineEnv = resolveEngineEnv(config);
 
   const logMsg = (type: string, msg: string) => {
     costTracker.logBackgroundMessage(jobId, type, "system", `[PROJECT] ${msg}`);
@@ -299,6 +302,7 @@ async function runProjectLoop(
         model: projectsConfig.planning_model || "haiku",
         tools: [],
         maxTurns: 1,
+        ...(engineEnv ? { env: engineEnv } : {}),
       });
 
       const planMessages: EngineMessage[] = [];
@@ -442,6 +446,7 @@ async function runProjectLoop(
             model: projectsConfig.summary_model || "haiku",
             tools: [],
             maxTurns: 1,
+            ...(engineEnv ? { env: engineEnv } : {}),
           });
 
           const summaryMessages: EngineMessage[] = [];
@@ -466,6 +471,7 @@ async function runProjectLoop(
             model: projectsConfig.review_model || config.agents.ceo?.model || "opus",
             tools: [],
             maxTurns: 1,
+            ...(engineEnv ? { env: engineEnv } : {}),
           });
 
           const reviewMessages: EngineMessage[] = [];
@@ -605,7 +611,8 @@ async function runProjectLoop(
           },
           projectDir,
           costTracker,
-          sessionId
+          sessionId,
+          config
         );
         logMsg("info", "Journal entry saved");
       } catch {

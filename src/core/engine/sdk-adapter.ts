@@ -58,6 +58,7 @@ export class ClaudeSDKEngine implements AgentEngine {
         maxTurns: options.maxTurns,
         mcpServers: options.mcpServers,
         allowedTools: options.allowedTools,
+        env: options.env,
       },
     });
   }
@@ -81,6 +82,7 @@ export class ClaudeSDKEngine implements AgentEngine {
         maxTurns: options.maxTurns,
         mcpServers: options.mcpServers,
         allowedTools: options.allowedTools,
+        env: options.env,
       },
     });
   }

@@ -109,6 +109,11 @@ export async function GET() {
         template: config.company.template,
         projectDir: config.projectDir,
       },
+      engine: {
+        mode: config.engine.mode,
+        hasApiKey: config.engine.hasApiKey,
+        maskedKey: config.engine.maskedKey,
+      },
       settings: {
         costLimitDaily: config.settings.costLimitDaily,
         costLimitMonthly: config.settings.costLimitMonthly,

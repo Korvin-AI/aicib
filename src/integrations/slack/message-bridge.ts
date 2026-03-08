@@ -368,7 +368,8 @@ export class BriefQueue {
           result,
           this.projectDir,
           this.costTracker,
-          activeSession.sessionId
+          activeSession.sessionId,
+          config
         ).catch(() => { /* best-effort */ });
       } finally {
         if (this.sessionLock) this.sessionLock.release();

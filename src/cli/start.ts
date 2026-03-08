@@ -1,7 +1,7 @@
 import path from "node:path";
 import chalk from "chalk";
 import ora from "ora";
-import { loadConfig } from "../core/config.js";
+import { loadConfig, resolveApiKey, maskApiKey, assertEngineReady } from "../core/config.js";
 import { loadAgentDefinitions } from "../core/agents.js";
 import { getAgentsDir, createTeamState } from "../core/team.js";
 import { CostTracker } from "../core/cost-tracker.js";
@@ -33,6 +33,18 @@ export async function startCommand(options: StartOptions): Promise<void> {
     );
     console.error(chalk.yellow(`  Run 'aicib init' first.\n`));
     process.exit(1);
+  }
+
+  // Fail fast if engine mode requires an API key that isn't set
+  assertEngineReady(config);
+
+  // Display engine mode
+  const engineMode = config.engine?.mode || "claude-code";
+  if (engineMode === "claude-api") {
+    const apiKey = resolveApiKey(config);
+    console.log(chalk.dim(`  [ENGINE] Using Anthropic API key (${maskApiKey(apiKey!)})`));
+  } else {
+    console.log(chalk.dim("  [ENGINE] Using Claude Code subscription"));
   }
 
   // Verify agent definitions exist

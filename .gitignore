@@ -25,6 +25,9 @@ Thumbs.db
 ui/.next/
 ui/out/
 
+# Config may contain API keys
+aicib.config.yaml
+
 # Logs
 *.log
 npm-debug.log*

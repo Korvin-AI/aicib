@@ -24,7 +24,7 @@ import { loadAgentDefinitions, getTemplatePath } from "../../core/agents.js";
 import { getAgentsDir } from "../../core/team.js";
 import { loadPreset, type PersonaOverlay } from "../../core/persona.js";
 import { recordRunCosts, type SessionResult } from "../../core/agent-runner.js";
-import { loadConfig } from "../../core/config.js";
+import { loadConfig, resolveEngineEnv } from "../../core/config.js";
 import {
   formatForSlack,
   markdownToMrkdwn,
@@ -235,7 +235,8 @@ export async function classifyWithAI(
   sdkSessionId: string,
   sessionLock: SessionLock,
   costTracker?: CostTracker,
-  aicibSessionId?: string
+  aicibSessionId?: string,
+  engineEnv?: Record<string, string>
 ): Promise<"chat" | "brief"> {
   try {
     await sessionLock.acquire();
@@ -258,6 +259,7 @@ Reply with exactly one word: CHAT or BRIEF`;
       permissionMode: "bypassPermissions",
       maxBudgetUsd: 0.01,
       maxTurns: 1,
+      ...(engineEnv ? { env: engineEnv } : {}),
     });
 
     for await (const msg of stream) {
@@ -426,6 +428,7 @@ FOUNDER'S MESSAGE:
 ${text}`;
 
       const ceoModel = config.agents.ceo?.model || "opus";
+      const engineEnv = resolveEngineEnv(config);
 
       const stream = getEngine().resumeSession(activeSession.sdkSessionId, {
         prompt: chatPrompt,
@@ -436,6 +439,7 @@ ${text}`;
         permissionMode: "bypassPermissions",
         maxBudgetUsd: this.slackConfig.chat_max_budget_head,
         maxTurns: 3,
+        ...(engineEnv ? { env: engineEnv } : {}),
       });
 
       const result = await this.streamAndPost(stream, "ceo", channelId, threadTs);
@@ -511,6 +515,7 @@ ${text}`;
       agentRole,
       channelId
     );
+    const engineEnv = resolveEngineEnv(config);
 
     if (chatSession.sdkSessionId) {
       // Resume existing agent session
@@ -528,6 +533,7 @@ ${text}`;
         allowDangerouslySkipPermissions: true,
         maxBudgetUsd: maxBudget,
         maxTurns,
+        ...(engineEnv ? { env: engineEnv } : {}),
       });
 
       let result;
@@ -557,6 +563,7 @@ ${text}`;
         allowDangerouslySkipPermissions: true,
         maxBudgetUsd: maxBudget,
         maxTurns,
+        ...(engineEnv ? { env: engineEnv } : {}),
       });
 
       let newSessionId = "";

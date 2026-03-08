@@ -22,7 +22,7 @@ import { WebClient } from "@slack/web-api";
 import path from "node:path";
 import fs from "node:fs";
 
-import { loadConfig } from "../../core/config.js";
+import { loadConfig, resolveEngineEnv } from "../../core/config.js";
 import { CostTracker } from "../../core/cost-tracker.js";
 import { registerMessageHandler } from "../../core/agent-runner.js";
 import type { SlackConfig, ChannelMapping } from "./types.js";
@@ -255,7 +255,7 @@ async function main(): Promise<void> {
         return;
       }
 
-      const aiResult = await classifyWithAI(text, activeSession.sdkSessionId, sessionLock, costTracker, activeSession.sessionId);
+      const aiResult = await classifyWithAI(text, activeSession.sdkSessionId, sessionLock, costTracker, activeSession.sessionId, resolveEngineEnv(config));
 
       if (aiResult === "chat") {
         await chatHandler.handleCEOChat(text, channelId, ts);

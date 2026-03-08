@@ -8,6 +8,7 @@ import {
   getConfigPath,
   loadConfig,
   saveConfig,
+  validateApiKeyFormat,
   type AicibConfig,
 } from "../core/config.js";
 import { getTemplatePath, listTemplates } from "../core/agents.js";
@@ -183,6 +184,40 @@ export async function initCommand(options: InitOptions): Promise<void> {
     selectedPreset = answer.selectedPreset;
   }
 
+  // Auth mode selection
+  const { authMode } = await inquirer.prompt([
+    {
+      type: "list",
+      name: "authMode",
+      message: "How will your AI company authenticate?",
+      choices: [
+        {
+          name: "Claude Code subscription (you're already logged in)",
+          value: "claude-code",
+        },
+        {
+          name: "Anthropic API key (enter your key)",
+          value: "claude-api",
+        },
+      ],
+      default: "claude-code",
+    },
+  ]);
+
+  let initApiKey: string | undefined;
+  if (authMode === "claude-api") {
+    const { apiKey } = await inquirer.prompt([
+      {
+        type: "password",
+        name: "apiKey",
+        message: "Anthropic API key:",
+        mask: "*",
+        validate: (input: string) => validateApiKeyFormat(input),
+      },
+    ]);
+    initApiKey = apiKey.trim();
+  }
+
   const spinner = ora("  Creating project structure...").start();
 
   try {
@@ -194,9 +229,17 @@ export async function initCommand(options: InitOptions): Promise<void> {
       selectedPreset
     );
 
-    // Write config
+    // Write config — compose engine block into YAML before writing to avoid
+    // a load-patch-save round-trip that is fragile and wasteful.
     const configPath = getConfigPath(projectDir);
-    fs.writeFileSync(configPath, composed.configYaml, "utf-8");
+    let configYaml = composed.configYaml;
+    if (authMode === "claude-api") {
+      const engineBlock = initApiKey
+        ? `\nengine:\n  mode: claude-api\n  api_key: "${initApiKey}"\n`
+        : `\nengine:\n  mode: claude-api\n`;
+      configYaml += engineBlock;
+    }
+    fs.writeFileSync(configPath, configYaml, "utf-8");
 
     spinner.text = "  Installing agent definitions...";
 

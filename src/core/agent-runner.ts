@@ -12,6 +12,7 @@ import { getAgentsDir } from "./team.js";
 import { CostTracker } from "./cost-tracker.js";
 import { KnowledgeManager } from "./knowledge.js";
 import type { AicibConfig } from "./config.js";
+import { resolveEngineEnv } from "./config.js";
 import type { PersonaOverlay, AgentPersonaConfig } from "./persona.js";
 import { loadPreset } from "./persona.js";
 import { resolveAllMCPServers, resolveMCPServersForRole, formatMCPContextFromNames, getMCPConfig } from "./mcp.js";
@@ -364,6 +365,8 @@ Keep it concise — 3-5 sentences max.`;
   const mcpServers = resolveAllMCPServers(config);
   const hasMCPServers = Object.keys(mcpServers).length > 0;
 
+  const engineEnv = resolveEngineEnv(config);
+
   const queryStream = getEngine().startSession({
     prompt: startPrompt,
     systemPrompt: {
@@ -380,6 +383,7 @@ Keep it concise — 3-5 sentences max.`;
     maxBudgetUsd: config.settings.cost_limit_daily,
     maxTurns: 500,
     ...(hasMCPServers ? { mcpServers } : {}),
+    ...(engineEnv ? { env: engineEnv } : {}),
   });
 
   for await (const message of queryStream) {
@@ -483,6 +487,7 @@ REMINDER: Your project directory is ${projectDir}. When delegating to department
   // Resolve MCP servers for the session (union of all agents' servers)
   const mcpServers = resolveAllMCPServers(config);
   const hasMCPServers = Object.keys(mcpServers).length > 0;
+  const engineEnv = resolveEngineEnv(config);
 
   const queryStream = getEngine().resumeSession(sdkSessionId, {
     prompt: briefPrompt,
@@ -495,6 +500,7 @@ REMINDER: Your project directory is ${projectDir}. When delegating to department
     maxBudgetUsd: config.settings.cost_limit_daily,
     maxTurns: 500,
     ...(hasMCPServers ? { mcpServers } : {}),
+    ...(engineEnv ? { env: engineEnv } : {}),
   });
 
   for await (const message of queryStream) {
@@ -555,13 +561,15 @@ export async function generateJournalEntry(
   result: SessionResult,
   projectDir: string,
   costTracker: CostTracker,
-  sessionId: string
+  sessionId: string,
+  config: AicibConfig
 ): Promise<void> {
   const summaryPrompt = `Generate a concise journal entry (3-5 sentences) covering: what was requested, how you delegated, key decisions, what was produced, and context for future sessions. Reply with ONLY the summary text, no formatting or preamble.`;
 
   let summaryText = "";
 
   try {
+    const engineEnv = resolveEngineEnv(config);
     const queryStream = getEngine().resumeSession(sdkSessionId, {
       prompt: summaryPrompt,
       model: "haiku",
@@ -569,6 +577,7 @@ export async function generateJournalEntry(
       tools: [],
       permissionMode: "bypassPermissions",
       maxBudgetUsd: 0.05,
+      ...(engineEnv ? { env: engineEnv } : {}),
     });
 
     for await (const message of queryStream) {

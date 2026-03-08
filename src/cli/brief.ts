@@ -1,6 +1,6 @@
 import path from "node:path";
 import chalk from "chalk";
-import { loadConfig } from "../core/config.js";
+import { loadConfig, assertEngineReady } from "../core/config.js";
 import { CostTracker } from "../core/cost-tracker.js";
 import {
   sendBrief,
@@ -51,6 +51,9 @@ export async function briefCommand(
     );
     process.exit(1);
   }
+
+  // Fail fast if engine mode requires an API key that isn't set
+  assertEngineReady(config);
 
   console.log(header("Briefing CEO"));
   console.log(chalk.dim(`  Company: ${config.company.name}`));
@@ -299,7 +302,8 @@ export async function briefCommand(
         result,
         projectDir,
         costTracker,
-        activeSession.sessionId
+        activeSession.sessionId,
+        config
       );
 
       console.log(

@@ -21,9 +21,16 @@ export interface AgentConfig {
   displayName?: string;
 }
 
+export interface EngineConfigSnapshot {
+  mode: "claude-code" | "claude-api";
+  hasApiKey: boolean;
+  maskedKey?: string;
+}
+
 export interface AppConfigSnapshot {
   company: CompanyConfig;
   settings: AppSettingsConfig;
+  engine: EngineConfigSnapshot;
   agents: AgentConfig[];
   projectDir: string;
   exists: boolean;
@@ -98,6 +105,20 @@ function parseSettings(config: UnknownRecord): AppSettingsConfig {
   const costLimitDaily = asNumber(settings?.cost_limit_daily) ?? 50;
   const costLimitMonthly = asNumber(settings?.cost_limit_monthly) ?? 500;
   return { costLimitDaily, costLimitMonthly };
+}
+
+function parseEngine(config: UnknownRecord): EngineConfigSnapshot {
+  const engine = asRecord(config.engine);
+  const mode = (asString(engine?.mode) === "claude-api" ? "claude-api" : "claude-code") as "claude-code" | "claude-api";
+  const apiKey = asString(engine?.api_key);
+  const envKey = typeof process !== "undefined" ? process.env?.ANTHROPIC_API_KEY : undefined;
+  const resolvedKey = apiKey || envKey;
+  const hasApiKey = mode === "claude-api" && !!resolvedKey;
+  // Keep in sync with src/core/config.ts:maskApiKey
+  const maskedKey = hasApiKey && resolvedKey
+    ? (resolvedKey.length <= 12 ? "sk-ant-...****" : `sk-ant-...${resolvedKey.slice(-4)}`)
+    : undefined;
+  return { mode, hasApiKey, maskedKey };
 }
 
 function parsePersonaDisplayNames(config: UnknownRecord): Map<string, string> {
@@ -211,6 +232,7 @@ export function readAppConfig(): AppConfigSnapshot {
     return {
       company: { name: "AICIB", template: "saas-startup" },
       settings: { costLimitDaily: 50, costLimitMonthly: 500 },
+      engine: { mode: "claude-code", hasApiKey: false },
       agents: [],
       projectDir,
       exists: false,
@@ -224,6 +246,7 @@ export function readAppConfig(): AppConfigSnapshot {
   return {
     company: parseCompany(config),
     settings: parseSettings(config),
+    engine: parseEngine(config),
     agents: parseAgents(config),
     projectDir,
     exists: true,

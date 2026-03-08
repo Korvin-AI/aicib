@@ -11,6 +11,11 @@ interface SettingsPayload {
     template: string;
     projectDir: string;
   };
+  engine: {
+    mode: "claude-code" | "claude-api";
+    hasApiKey: boolean;
+    maskedKey?: string;
+  };
   settings: {
     costLimitDaily: number;
     costLimitMonthly: number;
@@ -157,6 +162,25 @@ export default function SettingsPage() {
             <p>Name: <span className="text-muted-foreground">{data.company.name}</span></p>
             <p>Template: <span className="text-muted-foreground">{data.company.template}</span></p>
             <p>Project Dir: <span className="text-muted-foreground font-mono text-[12px]">{data.company.projectDir}</span></p>
+          </div>
+        )}
+      </section>
+
+      <section className="mb-4 rounded-lg border border-border/80 bg-card p-3">
+        <h2 className="mb-2 text-[13px] font-medium">Engine</h2>
+        {loading || !data ? (
+          <p className="text-[13px] text-muted-foreground">Loading engine settings...</p>
+        ) : (
+          <div className="space-y-1 text-[13px]">
+            <p>Mode: <span className="text-muted-foreground">
+              {data.engine.mode === "claude-api" ? "Anthropic API Key" : "Claude Code Subscription"}
+            </span></p>
+            {data.engine.mode === "claude-api" && (
+              <p>API Key: <span className="text-muted-foreground font-mono text-[12px]">
+                {data.engine.hasApiKey ? data.engine.maskedKey : "Not configured"}
+              </span></p>
+            )}
+            <p className="text-[11px] text-muted-foreground/70">Change via <code className="rounded bg-muted px-1">aicib config</code></p>
           </div>
         )}
       </section>

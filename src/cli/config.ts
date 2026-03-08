@@ -5,8 +5,12 @@ import {
   loadConfig,
   saveConfig,
   listAllAgents,
+  resolveApiKey,
+  maskApiKey,
+  validateApiKeyFormat,
   type ModelName,
   type EscalationThreshold,
+  type EngineMode,
 } from "../core/config.js";
 import {
   VALID_PRESETS,
@@ -51,6 +55,7 @@ export async function configCommand(options: ConfigOptions): Promise<void> {
         { name: "Spending limits", value: "limits" },
         { name: "Escalation threshold", value: "escalation" },
         { name: "Agent personas", value: "personas" },
+        { name: "Engine mode", value: "engine" },
         { name: "View current config", value: "view" },
         { name: "Exit", value: "exit" },
       ],
@@ -398,6 +403,99 @@ export async function configCommand(options: ConfigOptions): Promise<void> {
       break;
     }
 
+    case "engine": {
+      const currentMode = config.engine?.mode || "claude-code";
+      const currentKey = resolveApiKey(config);
+      const currentDisplay = currentMode === "claude-api" && currentKey
+        ? `Claude API key (${maskApiKey(currentKey)})`
+        : "Claude Code subscription";
+
+      console.log(chalk.bold("\n  Engine Mode\n"));
+      console.log(`  Current: ${chalk.cyan(currentDisplay)}\n`);
+
+      const { engineAction } = await inquirer.prompt([
+        {
+          type: "list",
+          name: "engineAction",
+          message: "Choose engine mode:",
+          choices: [
+            {
+              name: `Claude Code subscription (uses your Claude Code login)${currentMode === "claude-code" ? " (current)" : ""}`,
+              value: "claude-code",
+            },
+            {
+              name: `Anthropic API key (enter your own key)${currentMode === "claude-api" ? " (current)" : ""}`,
+              value: "claude-api",
+            },
+            { name: "Back", value: "back" },
+          ],
+          default: currentMode,
+        },
+      ]);
+
+      if (engineAction === "back") break;
+
+      if (!config.engine) {
+        config.engine = { mode: "claude-code" };
+      }
+
+      if (engineAction === "claude-code") {
+        config.engine.mode = "claude-code";
+        delete config.engine.api_key;
+        saveConfig(projectDir, config);
+        console.log(chalk.green("\n  Engine mode set to Claude Code subscription\n"));
+      } else {
+        const { keySource } = await inquirer.prompt([
+          {
+            type: "list",
+            name: "keySource",
+            message: "How do you want to provide the API key?",
+            choices: [
+              { name: "Enter key now (stored in config file)", value: "enter" },
+              { name: "Use ANTHROPIC_API_KEY environment variable", value: "env" },
+            ],
+          },
+        ]);
+
+        if (keySource === "env") {
+          const envKey = process.env.ANTHROPIC_API_KEY;
+          if (!envKey) {
+            console.log(chalk.yellow("\n  Warning: ANTHROPIC_API_KEY is not currently set in your environment."));
+            console.log(chalk.yellow("  Make sure to export it before running aicib.\n"));
+          } else {
+            const keyCheck = validateApiKeyFormat(envKey);
+            if (keyCheck !== true) {
+              console.log(chalk.red(`\n  Error: ANTHROPIC_API_KEY — ${keyCheck}`));
+              console.log(chalk.yellow("  Returning to settings menu.\n"));
+              break;
+            }
+            console.log(chalk.green(`\n  Detected: ${maskApiKey(envKey)}`));
+          }
+          config.engine.mode = "claude-api";
+          delete config.engine.api_key;
+          saveConfig(projectDir, config);
+          console.log(chalk.green("  Engine mode set to Claude API key (via environment variable)\n"));
+        } else {
+          const { apiKey } = await inquirer.prompt([
+            {
+              type: "password",
+              name: "apiKey",
+              message: "Anthropic API key:",
+              mask: "*",
+              validate: (input: string) => validateApiKeyFormat(input),
+            },
+          ]);
+
+          config.engine.mode = "claude-api";
+          config.engine.api_key = apiKey.trim();
+          saveConfig(projectDir, config);
+          console.log(chalk.green(`\n  Engine mode set to Claude API key (${maskApiKey(apiKey.trim())})\n`));
+          console.log(chalk.yellow("  Note: The API key is stored in aicib.config.yaml. Ensure this file is in .gitignore.\n"));
+        }
+      }
+      break;
+    }
+
     case "view": {
       console.log(chalk.bold("\n  Current Configuration:\n"));
       console.log(`  Company: ${config.company.name}`);
@@ -425,6 +523,15 @@ export async function configCommand(options: ConfigOptions): Promise<void> {
       );
       console.log(
         `    Auto-start:     ${config.settings.auto_start_workers}`
+      );
+
+      const engineMode = config.engine?.mode || "claude-code";
+      const engineKey = resolveApiKey(config);
+      console.log(chalk.bold("\n  Engine:"));
+      console.log(
+        `    Mode:           ${engineMode === "claude-api"
+          ? `API key (${engineKey ? maskApiKey(engineKey) : "not set"})`
+          : "Claude Code subscription"}`
       );
 
       const currentPreset = config.persona?.preset || "professional";

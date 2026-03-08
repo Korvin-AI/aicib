@@ -15,7 +15,15 @@ import { isValidModelName } from "./model-router.js";
 /** Any valid model name — short ("opus") or full ("claude-opus-4-6"). */
 export type ModelName = string;
 export type EscalationThreshold = "low" | "medium" | "high";
+export type EngineMode = "claude-code" | "claude-api";
 export type { PersonaConfig } from "./persona.js";
+
+export interface EngineConfig {
+  /** "claude-code" = subscription (default), "claude-api" = API key */
+  mode: EngineMode;
+  /** Anthropic API key. Alternative: set ANTHROPIC_API_KEY env var. */
+  api_key?: string;
+}
 
 export interface WorkerConfig {
   model: ModelName;
@@ -47,6 +55,7 @@ export interface AicibConfig {
   company: CompanyConfig;
   agents: Record<string, AgentConfig>;
   settings: SettingsConfig;
+  engine?: EngineConfig;
   persona?: PersonaConfig;
   extensions: Record<string, unknown>;
 }
@@ -75,7 +84,7 @@ export interface ConfigExtension {
 
 const configExtensions: ConfigExtension[] = [];
 
-const RESERVED_CONFIG_KEYS = new Set(["company", "agents", "settings", "persona"]);
+const RESERVED_CONFIG_KEYS = new Set(["company", "agents", "settings", "engine", "persona"]);
 
 /**
  * Register a config extension so that a feature's config section is
@@ -133,8 +142,12 @@ export function saveConfig(projectDir: string, config: AicibConfig): void {
   const configPath = getConfigPath(projectDir);
 
   // Flatten extensions to top-level YAML keys (so the YAML reads naturally)
-  const { extensions, ...coreConfig } = config;
+  const { extensions, engine, ...coreConfig } = config;
   const toSave: Record<string, unknown> = { ...coreConfig };
+  // Only write engine section if it's non-default (avoid cluttering config for subscription users)
+  if (engine && (engine.mode !== "claude-code" || engine.api_key)) {
+    toSave.engine = engine;
+  }
   if (extensions) {
     for (const [key, value] of Object.entries(extensions)) {
       toSave[key] = value;
@@ -378,6 +391,38 @@ export function validateConfig(raw: Record<string, unknown>): AicibConfig {
     }
   }
 
+  // Validate engine config (optional section)
+  const VALID_ENGINE_MODES: EngineMode[] = ["claude-code", "claude-api"];
+  if (raw.engine && typeof raw.engine === "object") {
+    const engine = raw.engine as Record<string, unknown>;
+    if (engine.mode && !VALID_ENGINE_MODES.includes(engine.mode as EngineMode)) {
+      errors.push(
+        `engine.mode must be one of: ${VALID_ENGINE_MODES.join(", ")}`
+      );
+    }
+    // Type-check api_key first to prevent TypeError on startsWith() below
+    if (engine.api_key !== undefined && typeof engine.api_key !== "string") {
+      errors.push("engine.api_key must be a string");
+    }
+    if (engine.mode === "claude-api") {
+      const key = typeof engine.api_key === "string" ? engine.api_key : undefined;
+      const resolvedKey = key || process.env.ANTHROPIC_API_KEY;
+      if (!resolvedKey) {
+        // Downgrade to warning — the real guards are in assertEngineReady().
+        // This prevents the config wizard from locking users out when they
+        // set mode: claude-api with an env var they haven't exported yet.
+        console.warn(
+          'Warning: engine.mode is "claude-api" but no API key found. Set engine.api_key in config or export ANTHROPIC_API_KEY.'
+        );
+      } else {
+        const keyCheck = validateApiKeyFormat(resolvedKey);
+        if (keyCheck !== true) {
+          errors.push(`engine.api_key (or ANTHROPIC_API_KEY): ${keyCheck}`);
+        }
+      }
+    }
+  }
+
   // Validate and populate registered config extensions
   const extensions: Record<string, unknown> = {};
   for (const ext of configExtensions) {
@@ -393,7 +438,7 @@ export function validateConfig(raw: Record<string, unknown>): AicibConfig {
   }
 
   // Preserve unrecognized top-level keys for round-trip safety
-  const knownKeys = new Set(["company", "agents", "settings", "persona", ...configExtensions.map((e) => e.key)]);
+  const knownKeys = new Set(["company", "agents", "settings", "engine", "persona", ...configExtensions.map((e) => e.key)]);
   for (const [key, value] of Object.entries(raw)) {
     if (!knownKeys.has(key) && !(key in extensions)) {
       extensions[key] = value;
@@ -420,6 +465,13 @@ export function validateConfig(raw: Record<string, unknown>): AicibConfig {
       : {}),
   };
 
+  // Build engine config with defaults
+  const rawEngine = (raw.engine as Record<string, unknown>) || {};
+  const engineConfig: EngineConfig = {
+    mode: (rawEngine.mode as EngineMode) || "claude-code",
+    ...(rawEngine.api_key ? { api_key: rawEngine.api_key as string } : {}),
+  };
+
   return {
     company: {
       name: company.name as string,
@@ -439,9 +491,74 @@ export function validateConfig(raw: Record<string, unknown>): AicibConfig {
         (settings.auto_start_workers as boolean) ??
         DEFAULT_SETTINGS.auto_start_workers,
     },
+    engine: engineConfig,
     persona: personaConfig,
     extensions,
   };
+}
+
+/**
+ * Resolves the API key from config or environment.
+ * Returns undefined if mode is "claude-code" (no key needed).
+ */
+export function resolveApiKey(config: AicibConfig): string | undefined {
+  if (config.engine?.mode !== "claude-api") return undefined;
+  return config.engine.api_key || process.env.ANTHROPIC_API_KEY;
+}
+
+/**
+ * Masks an API key for display: "sk-ant-...xxxx"
+ */
+export function maskApiKey(key: string): string {
+  if (key.length <= 12) return "sk-ant-...****";
+  return `sk-ant-...${key.slice(-4)}`;
+}
+
+/**
+ * Validates that an API key has the expected Anthropic format.
+ * Returns `true` if valid, or an error message string if invalid.
+ */
+export function validateApiKeyFormat(key: string): true | string {
+  if (!key.trim()) return "API key is required";
+  if (!key.startsWith("sk-ant-")) return 'Key must start with "sk-ant-"';
+  return true;
+}
+
+/**
+ * Asserts that the engine is ready to run. Call this early in CLI commands
+ * (start, brief, etc.) to surface a clear error before hitting the SDK.
+ * Exits the process if the engine is in API mode but no key is available.
+ */
+export function assertEngineReady(config: AicibConfig): void {
+  const engineMode = config.engine?.mode || "claude-code";
+  if (engineMode !== "claude-api") return;
+
+  const apiKey = resolveApiKey(config);
+  if (!apiKey) {
+    console.error(
+      '\n  Error: Engine mode is "claude-api" but no API key found.\n' +
+      "  Set it with: aicib config -> Engine mode\n" +
+      "  Or export: ANTHROPIC_API_KEY=sk-ant-...\n"
+    );
+    process.exit(1);
+  }
+}
+
+/**
+ * Builds env override object for engine calls when in API key mode.
+ * Returns undefined when in Claude Code subscription mode.
+ */
+export function resolveEngineEnv(config: AicibConfig): Record<string, string> | undefined {
+  const apiKey = resolveApiKey(config);
+  if (!apiKey) return undefined;
+  // The Agent SDK replaces process.env entirely when `env` is provided,
+  // so we must include the full environment plus our API key override.
+  const env: Record<string, string> = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    if (v !== undefined) env[k] = v;
+  }
+  env.ANTHROPIC_API_KEY = apiKey;
+  return env;
 }
 
 export function getAgentModel(
