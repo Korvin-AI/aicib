@@ -38,6 +38,10 @@ export function rateLimitedError(message = 'Rate limit exceeded') {
   return new AppError(message, 429, 'RATE_LIMITED');
 }
 
+export function forbiddenError(message = 'Insufficient permissions') {
+  return new AppError(message, 403, 'FORBIDDEN');
+}
+
 export function notImplementedError(message: string) {
   return new AppError(message, 501, 'NOT_IMPLEMENTED');
 }

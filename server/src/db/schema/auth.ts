@@ -93,3 +93,21 @@ export const apiKeys = pgTable('api_keys', {
     .notNull()
     .defaultNow(),
 });
+
+export const orgInvitations = pgTable('org_invitations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id')
+    .notNull()
+    .references(() => organizations.id, { onDelete: 'cascade' }),
+  email: varchar('email', { length: 255 }).notNull(),
+  role: orgRoleEnum('role').notNull().default('member'),
+  tokenHash: text('token_hash').notNull(),
+  invitedBy: uuid('invited_by').references(() => users.id),
+  status: varchar('status', { length: 50 }).notNull().default('pending'),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (t) => [
+  uniqueIndex('org_invitations_org_email_idx').on(t.orgId, t.email),
+]);

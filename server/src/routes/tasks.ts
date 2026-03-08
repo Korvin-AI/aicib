@@ -4,6 +4,7 @@ import { parsePagination } from '../utils/pagination';
 import { validateBody } from '../middleware/validate';
 import { updateTaskSchema } from '../schemas/tasks';
 import { notFoundError } from '../utils/errors';
+import { requireRole } from '../middleware/rbac';
 import type { TenantContext } from '../types';
 
 const tasksRoute = new Hono<{ Variables: { tenant: TenantContext } }>();
@@ -40,7 +41,7 @@ tasksRoute.get('/:id', async (c) => {
   return c.json(data);
 });
 
-tasksRoute.put('/:id', validateBody(updateTaskSchema), async (c) => {
+tasksRoute.put('/:id', requireRole('member'), validateBody(updateTaskSchema), async (c) => {
   const { businessId } = c.get('tenant');
   const id = parseInt(c.req.param('id'), 10);
   if (isNaN(id)) throw notFoundError('Invalid task ID');

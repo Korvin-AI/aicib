@@ -7,6 +7,8 @@ import { errorHandler } from './middleware/error-handler';
 import { authMiddleware } from './middleware/auth';
 import { tenantMiddleware } from './middleware/tenant';
 import { rateLimitMiddleware } from './middleware/rate-limit';
+import { requireRole } from './middleware/rbac';
+import { rlsMiddleware } from './middleware/rls';
 import { health } from './routes/health';
 import { auth } from './routes/auth';
 import { status } from './routes/status';
@@ -24,6 +26,9 @@ import { settings } from './routes/settings';
 import { setup } from './routes/setup';
 import { stream } from './routes/stream';
 import { businessesRoute } from './routes/businesses';
+import { orgRoute } from './routes/org';
+import { storageRoute } from './routes/storage';
+import { exportRoute } from './routes/export';
 import { startBriefWorker, closeBriefQueue } from './workers/brief-worker';
 import { closeRedis } from './realtime/redis';
 import { runMigrations } from './db/migrate';
@@ -45,19 +50,45 @@ app.onError(errorHandler);
 app.route('/', health);
 app.route('/', auth);
 
-// Org-scoped routes (auth only, no tenant)
+// Org-scoped routes (auth + rate-limit, no tenant)
 const orgRoutes = new Hono();
 orgRoutes.use('*', authMiddleware);
 orgRoutes.use('*', rateLimitMiddleware);
 orgRoutes.route('/businesses', businessesRoute);
+orgRoutes.route('/org', orgRoute);
 app.route('/', orgRoutes);
 
-// Protected business routes (auth + tenant)
+// Protected business routes (auth + tenant + rate-limit)
 const businessRoutes = new Hono();
 businessRoutes.use('*', authMiddleware);
 businessRoutes.use('*', tenantMiddleware);
 businessRoutes.use('*', rateLimitMiddleware);
 
+// RLS middleware — excluded for SSE streaming routes (long-lived connections)
+businessRoutes.use('/status/*', rlsMiddleware);
+businessRoutes.use('/agents/*', rlsMiddleware);
+businessRoutes.use('/costs/*', rlsMiddleware);
+businessRoutes.use('/tasks/*', rlsMiddleware);
+businessRoutes.use('/journal/*', rlsMiddleware);
+businessRoutes.use('/brief/*', rlsMiddleware);
+businessRoutes.use('/briefs/*', rlsMiddleware);
+businessRoutes.use('/channels/*', rlsMiddleware);
+businessRoutes.use('/hr/*', rlsMiddleware);
+businessRoutes.use('/knowledge/*', rlsMiddleware);
+businessRoutes.use('/projects/*', rlsMiddleware);
+businessRoutes.use('/settings/*', rlsMiddleware);
+businessRoutes.use('/setup/*', rlsMiddleware);
+businessRoutes.use('/storage/*', rlsMiddleware);
+businessRoutes.use('/export/*', rlsMiddleware);
+
+// RBAC: member+ required for brief submission
+businessRoutes.use('/brief/*', requireRole('member'));
+
+// RBAC: admin+ required for admin routes (settings RBAC is inline on PUT/DELETE)
+businessRoutes.use('/setup/*', requireRole('admin'));
+businessRoutes.use('/export/*', requireRole('admin'));
+
+// Mount all routes
 businessRoutes.route('/status', status);
 businessRoutes.route('/agents', agents);
 businessRoutes.route('/costs', costs);
@@ -72,6 +103,8 @@ businessRoutes.route('/projects', projectsRoute);
 businessRoutes.route('/settings', settings);
 businessRoutes.route('/setup', setup);
 businessRoutes.route('/stream', stream);
+businessRoutes.route('/storage', storageRoute);
+businessRoutes.route('/export', exportRoute);
 
 app.route('/businesses/:businessId', businessRoutes);
 

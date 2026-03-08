@@ -1,6 +1,7 @@
-import { eq } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { db } from '../db/connection';
-import { organizations, orgMemberships } from '../db/schema/index';
+import { organizations, orgMemberships, users } from '../db/schema/index';
+import type { OrgRole } from '../types';
 
 // Cached org plan lookup (60s TTL)
 const planCache = new Map<string, { plan: string; expiresAt: number }>();
@@ -41,7 +42,7 @@ export async function createOrganization(name: string, slug: string) {
 export async function addMembership(
   userId: string,
   orgId: string,
-  role: 'owner' | 'admin' | 'member' | 'viewer',
+  role: OrgRole,
 ) {
   await db.insert(orgMemberships).values({ userId, orgId, role });
 }
@@ -91,4 +92,80 @@ export async function createOrgForUser(
 
   await addMembership(userId, org.id, 'owner');
   return org;
+}
+
+export async function getOrgById(orgId: string) {
+  const [org] = await db
+    .select()
+    .from(organizations)
+    .where(eq(organizations.id, orgId))
+    .limit(1);
+  return org ?? null;
+}
+
+export async function updateOrg(orgId: string, data: { name: string }) {
+  const [org] = await db
+    .update(organizations)
+    .set({ name: data.name })
+    .where(eq(organizations.id, orgId))
+    .returning();
+  return org ?? null;
+}
+
+export async function getOrgMembers(orgId: string) {
+  return db
+    .select({
+      userId: orgMemberships.userId,
+      role: orgMemberships.role,
+      email: users.email,
+      displayName: users.displayName,
+      createdAt: users.createdAt,
+    })
+    .from(orgMemberships)
+    .innerJoin(users, eq(orgMemberships.userId, users.id))
+    .where(eq(orgMemberships.orgId, orgId));
+}
+
+export async function updateMemberRole(
+  orgId: string,
+  userId: string,
+  role: OrgRole,
+) {
+  const [row] = await db
+    .update(orgMemberships)
+    .set({ role })
+    .where(
+      and(
+        eq(orgMemberships.orgId, orgId),
+        eq(orgMemberships.userId, userId),
+      ),
+    )
+    .returning();
+  return row ?? null;
+}
+
+export async function removeMember(orgId: string, userId: string) {
+  const [row] = await db
+    .delete(orgMemberships)
+    .where(
+      and(
+        eq(orgMemberships.orgId, orgId),
+        eq(orgMemberships.userId, userId),
+      ),
+    )
+    .returning();
+  return row ?? null;
+}
+
+export async function countOrgOwners(orgId: string): Promise<number> {
+  const [result] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(orgMemberships)
+    .where(
+      and(
+        eq(orgMemberships.orgId, orgId),
+        eq(orgMemberships.role, 'owner'),
+      ),
+    );
+  return result?.count ?? 0;
 }

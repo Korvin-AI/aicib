@@ -5,12 +5,12 @@ import { setCookie, getCookie, deleteCookie } from 'hono/cookie';
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { db } from '../db/connection';
-import { users, organizations, orgMemberships, authSessions } from '../db/schema/index';
+import { users, organizations, orgMemberships, orgInvitations, authSessions } from '../db/schema/index';
 import { hashPassword, verifyPassword } from '../utils/password';
 import { generateSessionToken } from '../utils/token';
 import { createHash } from 'node:crypto';
 import { findUserById, verifyUserPassword } from '../repositories/user-repo';
-import { deleteSession } from '../repositories/session-repo';
+import { createSession, deleteSession } from '../repositories/session-repo';
 import { findOrgByUserId } from '../repositories/org-repo';
 import { findBusinessesByOrg } from '../repositories/business-repo';
 import { authMiddleware } from '../middleware/auth';
@@ -158,8 +158,7 @@ auth.post('/auth/login', zValidator('json', loginSchema), async (c) => {
 
   const org = await findOrgByUserId(user.id);
 
-  // Create session with hashed token (uses session-repo)
-  const { createSession } = await import('../repositories/session-repo');
+  // Create session with hashed token
   const ipAddress = c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip');
   const userAgent = c.req.header('user-agent');
   const { token, expiresAt } = await createSession(user.id, ipAddress, userAgent);
@@ -213,5 +212,116 @@ auth.get('/auth/me', authMiddleware, async (c) => {
     businesses: businessList,
   });
 });
+
+// POST /auth/accept-invite — public endpoint, wrapped in a transaction
+auth.post(
+  '/auth/accept-invite',
+  zValidator('json', z.object({
+    token: z.string().min(1),
+    password: z.string().min(8).optional(),
+    displayName: z.string().max(255).optional(),
+  })),
+  async (c) => {
+    const { token, password, displayName } = c.req.valid('json');
+    const tokenHash = hashToken(token);
+
+    // Validate invitation outside the transaction (read-only)
+    const [invitation] = await db
+      .select()
+      .from(orgInvitations)
+      .where(eq(orgInvitations.tokenHash, tokenHash))
+      .limit(1);
+
+    if (!invitation) {
+      return c.json({ error: 'Invalid or expired invitation' }, 400);
+    }
+    if (invitation.status !== 'pending') {
+      return c.json({ error: `Invitation already ${invitation.status}` }, 400);
+    }
+    if (invitation.expiresAt < new Date()) {
+      return c.json({ error: 'Invitation has expired' }, 400);
+    }
+
+    // Hash password before entering the transaction to avoid blocking the DB connection
+    const passwordHash = password ? await hashPassword(password) : null;
+
+    // All mutations in a single transaction to prevent race conditions
+    const result = await db.transaction(async (tx) => {
+      // Re-check invitation status + expiry inside tx (serializable guard)
+      const [inv] = await tx
+        .select()
+        .from(orgInvitations)
+        .where(eq(orgInvitations.id, invitation.id))
+        .limit(1);
+      if (!inv || inv.status !== 'pending') {
+        throw Object.assign(new Error(`Invitation already ${inv?.status ?? 'missing'}`), { status: 400 });
+      }
+      if (inv.expiresAt < new Date()) {
+        throw Object.assign(new Error('Invitation has expired'), { status: 400 });
+      }
+
+      // Find or create user
+      const [existingUser] = await tx
+        .select({ id: users.id, email: users.email, displayName: users.displayName })
+        .from(users)
+        .where(eq(users.email, inv.email.toLowerCase()))
+        .limit(1);
+
+      let user: { id: string; email: string; displayName: string | null };
+      if (!existingUser) {
+        if (!passwordHash) {
+          throw Object.assign(new Error('Password required for new accounts'), { status: 400 });
+        }
+        const [newUser] = await tx
+          .insert(users)
+          .values({
+            email: inv.email.toLowerCase(),
+            passwordHash,
+            displayName: displayName ?? null,
+          })
+          .returning({ id: users.id, email: users.email, displayName: users.displayName });
+        user = newUser;
+      } else {
+        user = existingUser;
+      }
+
+      // Add membership (ignore duplicate)
+      try {
+        await tx.insert(orgMemberships).values({
+          userId: user.id,
+          orgId: inv.orgId,
+          role: inv.role,
+        });
+      } catch (err: any) {
+        if (err?.code !== '23505') throw err;
+      }
+
+      // Mark invitation accepted
+      await tx
+        .update(orgInvitations)
+        .set({ status: 'accepted' })
+        .where(eq(orgInvitations.id, inv.id));
+
+      return { user, orgId: inv.orgId, role: inv.role };
+    });
+
+    // Create session outside the transaction (independent operation)
+    const ipAddress = c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip');
+    const userAgent = c.req.header('user-agent');
+    const { token: sessionToken, expiresAt } = await createSession(
+      result.user.id,
+      ipAddress,
+      userAgent,
+    );
+
+    setSessionCookie(c, sessionToken, expiresAt);
+
+    return c.json({
+      user: { id: result.user.id, email: result.user.email, displayName: result.user.displayName },
+      orgId: result.orgId,
+      role: result.role,
+    });
+  },
+);
 
 export { auth };

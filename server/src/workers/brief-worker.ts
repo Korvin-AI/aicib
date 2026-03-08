@@ -196,12 +196,24 @@ async function cloudSendBrief(
 
   const briefPrompt = `DIRECTIVE FROM HUMAN FOUNDER:\n\n${data.directive}\n\n---\nProcess this directive according to your CEO role. Decompose into department-level objectives and delegate to your team using the Task tool. Report back with your plan before executing.`;
 
+  // Resolve per-org API key, fall back to server-wide key
+  let anthropicKey = env.ANTHROPIC_API_KEY ?? '';
+  try {
+    const { getOrgSecret } = await import('../repositories/secrets-repo');
+    const orgKey = await getOrgSecret(data.orgId, 'anthropic_api_key');
+    if (orgKey) {
+      anthropicKey = orgKey;
+    }
+  } catch {
+    // ENCRYPTION_KEY not set or decrypt failed — use server key
+  }
+
   // Whitelist only needed env vars — avoid leaking DATABASE_URL, REDIS_URL, etc.
   const engineEnv: Record<string, string> = {
     HOME: process.env.HOME ?? '',
     PATH: process.env.PATH ?? '',
     NODE_ENV: process.env.NODE_ENV ?? 'production',
-    ...(env.ANTHROPIC_API_KEY ? { ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY } : {}),
+    ...(anthropicKey ? { ANTHROPIC_API_KEY: anthropicKey } : {}),
   };
 
   const ceoModel =
@@ -361,6 +373,72 @@ function createMessageCallback(
 }
 
 // ---------------------------------------------------------------------------
+// 5e-pre. Deliverable collection + upload
+// ---------------------------------------------------------------------------
+
+async function collectAndUploadDeliverables(
+  orgId: string,
+  businessId: string,
+  jobId: number,
+  sdkSessionId: string,
+): Promise<string[]> {
+  try {
+    const { readdir, readFile } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    const { storeDeliverable } = await import('../storage/storage-service');
+
+    // SDK workspace directory convention
+    const workDir = join(
+      process.env.HOME ?? '/tmp',
+      '.claude',
+      'sessions',
+      sdkSessionId,
+    );
+
+    let entries: import('node:fs').Dirent[];
+    try {
+      entries = await readdir(workDir, { withFileTypes: true, recursive: true });
+    } catch {
+      return []; // No workspace directory — nothing to upload
+    }
+
+    const uploaded: string[] = [];
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      const file = entry.name;
+      // parentPath (Node 21.2+), path (Node 20+), fallback to workDir
+      const parentDir = (entry as any).parentPath ?? (entry as any).path ?? workDir;
+      const filePath = join(parentDir, file);
+      const content = await readFile(filePath);
+      // Simple MIME type guessing
+      const ext = file.split('.').pop()?.toLowerCase() ?? '';
+      const mimeTypes: Record<string, string> = {
+        json: 'application/json',
+        txt: 'text/plain',
+        md: 'text/markdown',
+        csv: 'text/csv',
+        html: 'text/html',
+        pdf: 'application/pdf',
+        png: 'image/png',
+        jpg: 'image/jpeg',
+        svg: 'image/svg+xml',
+      };
+      const contentType = mimeTypes[ext] ?? 'application/octet-stream';
+
+      try {
+        await storeDeliverable(orgId, businessId, jobId, file, content, contentType);
+        uploaded.push(file);
+      } catch (err) {
+        console.error(`Failed to upload deliverable ${file}:`, (err as Error).message);
+      }
+    }
+    return uploaded;
+  } catch {
+    return []; // S3 not configured or other error — skip silently
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 5e. BullMQ Queue + Worker setup
 // ---------------------------------------------------------------------------
 
@@ -438,6 +516,14 @@ export async function startBriefWorker(): Promise<Worker<BriefJobData>> {
           result.totalCostUsd,
         );
 
+        // Collect and upload deliverables
+        const uploadedFiles = await collectAndUploadDeliverables(
+          data.orgId,
+          data.businessId,
+          data.jobId,
+          data.sdkSessionId,
+        );
+
         // Mark completed
         await tracker.updateBackgroundJob(data.jobId, {
           status: 'completed',
@@ -445,6 +531,9 @@ export async function startBriefWorker(): Promise<Worker<BriefJobData>> {
           totalCostUsd: result.totalCostUsd,
           numTurns: result.numTurns,
           durationMs: result.durationMs,
+          resultSummary: uploadedFiles.length
+            ? JSON.stringify({ deliverables: uploadedFiles })
+            : null,
         });
         await tracker.setAgentStatus('ceo', 'idle');
       } catch (err) {
