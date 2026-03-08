@@ -15,6 +15,7 @@ import { costs } from './routes/costs';
 import { tasksRoute } from './routes/tasks';
 import { journal } from './routes/journal';
 import { brief } from './routes/brief';
+import { briefs } from './routes/briefs';
 import { channels } from './routes/channels';
 import { hr } from './routes/hr';
 import { knowledge } from './routes/knowledge';
@@ -23,6 +24,8 @@ import { settings } from './routes/settings';
 import { setup } from './routes/setup';
 import { stream } from './routes/stream';
 import { businessesRoute } from './routes/businesses';
+import { startBriefWorker, closeBriefQueue } from './workers/brief-worker';
+import { closeRedis } from './realtime/redis';
 import { runMigrations } from './db/migrate';
 
 const app = new Hono();
@@ -61,6 +64,7 @@ businessRoutes.route('/costs', costs);
 businessRoutes.route('/tasks', tasksRoute);
 businessRoutes.route('/journal', journal);
 businessRoutes.route('/brief', brief);
+businessRoutes.route('/briefs', briefs);
 businessRoutes.route('/channels', channels);
 businessRoutes.route('/hr', hr);
 businessRoutes.route('/knowledge', knowledge);
@@ -84,6 +88,8 @@ async function main() {
     console.warn('Server will start, but DB may not be fully set up.');
   }
 
+  const worker = await startBriefWorker();
+
   serve(
     {
       fetch: app.fetch,
@@ -93,6 +99,17 @@ async function main() {
       console.log(`AICIB API server running on http://localhost:${info.port}`);
     },
   );
+
+  // Graceful shutdown
+  const shutdown = async () => {
+    console.log('Shutting down...');
+    await worker.close();
+    await closeBriefQueue();
+    await closeRedis();
+    process.exit(0);
+  };
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
 }
 
 main().catch((err) => {
