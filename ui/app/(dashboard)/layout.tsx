@@ -8,6 +8,7 @@ import { UIPreferencesProvider, useUIPreferences } from "@/lib/ui-preferences";
 import { AuthProvider } from "@/lib/auth-context";
 import { SimpleSidebar } from "@/components/simple/simple-sidebar";
 import { LiveActivitySidebar } from "@/components/simple/live-activity-sidebar";
+import { ApiKeySetupGuard } from "@/components/api-key-setup-guard";
 
 function DashboardShell({ children }: { children: React.ReactNode }) {
   const { uiMode, hydrated } = useUIPreferences();
@@ -39,7 +40,9 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
               minHeight: "100%",
             }}
           >
-            <BusinessBootstrapGuard>{children}</BusinessBootstrapGuard>
+            <BusinessBootstrapGuard>
+              <ApiKeySetupGuard>{children}</ApiKeySetupGuard>
+            </BusinessBootstrapGuard>
           </div>
         </main>
         <LiveActivitySidebar />
@@ -53,7 +56,9 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar />
         <main className="flex flex-1 flex-col overflow-hidden">
-          <BusinessBootstrapGuard>{children}</BusinessBootstrapGuard>
+          <BusinessBootstrapGuard>
+            <ApiKeySetupGuard>{children}</ApiKeySetupGuard>
+          </BusinessBootstrapGuard>
         </main>
       </div>
     </div>
