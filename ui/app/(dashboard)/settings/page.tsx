@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatCurrency, formatDateTime } from "@/lib/format";
+import { ApiKeyForm } from "@/components/api-key-form";
 
 interface SettingsPayload {
   company: {
@@ -29,6 +30,7 @@ interface SettingsPayload {
     hasApiKey: boolean;
     maskedKey?: string;
   };
+  requireUserApiKeys?: boolean;
   settings: {
     costLimitDaily: number;
     costLimitMonthly: number;
@@ -231,6 +233,16 @@ function ProSettingsPage() {
               <p className="text-[11px] text-muted-foreground/70">
                 Requires running <code className="rounded bg-muted px-1">aicib cloud-agent start</code> on your machine
               </p>
+            )}
+            {isCloudMode && (
+              <div className="mt-3 border-t border-border/50 pt-3">
+                <p className="mb-2 text-[12px] text-muted-foreground">Anthropic API Key</p>
+                <ApiKeyForm
+                  hasApiKey={data.engine.hasApiKey}
+                  maskedKey={data.engine.maskedKey}
+                  requireUserApiKeys={data.requireUserApiKeys ?? false}
+                />
+              </div>
             )}
           </div>
         )}

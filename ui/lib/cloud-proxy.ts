@@ -146,17 +146,19 @@ export async function cloudFetchAuth(
   });
 
   // Capture aicib_session cookie from Hono response and re-set as aicib_cloud_token
-  const setCookieHeader = upstream.headers.get("set-cookie");
-  if (setCookieHeader) {
-    const match = setCookieHeader.match(/aicib_session=([^;]+)/);
-    if (match) {
-      res.cookies.set("aicib_cloud_token", match[1], {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        path: "/",
-        maxAge: 30 * 24 * 60 * 60, // 30 days
-      });
+  if (upstream.ok) {
+    const setCookieHeader = upstream.headers.get("set-cookie");
+    if (setCookieHeader) {
+      const match = setCookieHeader.match(/aicib_session=([^;]+)/);
+      if (match) {
+        res.cookies.set("aicib_cloud_token", match[1], {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          path: "/",
+          maxAge: 30 * 24 * 60 * 60, // 30 days
+        });
+      }
     }
   }
 

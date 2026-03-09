@@ -105,6 +105,7 @@ export async function GET(request: Request) {
     const cloudUrl = `${getCloudApiUrl()}/businesses/${businessId}/stream`;
     const upstream = await fetch(cloudUrl, {
       headers: { Cookie: `aicib_session=${token}` },
+      signal: request.signal,
     });
 
     if (!upstream.ok || !upstream.body) {

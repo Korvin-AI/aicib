@@ -6,6 +6,7 @@ import { setOrgSecret, deleteOrgSecret, listOrgSecretKeys } from '../repositorie
 import { validateBody } from '../middleware/validate';
 import { requireRole } from '../middleware/rbac';
 import { updateSettingsSchema } from '../schemas/settings';
+import { env } from '../env';
 import type { TenantContext } from '../types';
 
 const settings = new Hono<{ Variables: { tenant: TenantContext } }>();
@@ -25,7 +26,8 @@ settings.get('/', async (c) => {
 
   return c.json({
     ...data,
-    engine: { hasApiKey, maskedKey: hasApiKey ? 'sk-ant-•••••••' : undefined },
+    engine: { ...data.engine, hasApiKey, maskedKey: hasApiKey ? 'sk-ant-•••••••' : undefined },
+    requireUserApiKeys: env.REQUIRE_USER_API_KEYS === 'true',
   });
 });
 
@@ -45,7 +47,9 @@ settings.put('/', requireRole('admin'), validateBody(updateSettingsSchema), asyn
 settings.put(
   '/anthropic-key',
   requireRole('admin'),
-  validateBody(z.object({ apiKey: z.string().min(1) })),
+  validateBody(z.object({
+    apiKey: z.string().min(20).startsWith('sk-ant-', { message: 'Invalid Anthropic API key format' }),
+  })),
   async (c) => {
     const { orgId } = c.get('tenant');
     const { apiKey } = c.req.valid('json');
