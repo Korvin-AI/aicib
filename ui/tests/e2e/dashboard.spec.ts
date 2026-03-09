@@ -23,12 +23,15 @@ test.describe("Dashboard — homepage smoke", () => {
     await page.waitForLoadState("networkidle");
 
     // Verify no full-page error overlay from Next.js (the red error box).
-    // In Next.js 16, nextjs-portal is always in the DOM; an actual error
-    // renders a shadow-DOM child with the class "nextjs-container-errors-header".
-    const nextErrorOverlay = page.locator(
-      "nextjs-portal >> internal:shadow=.nextjs-container-errors-header"
-    );
-    await expect(nextErrorOverlay).toHaveCount(0);
+    // In Next.js 16, <nextjs-portal> is always in the DOM as a shell.
+    // An actual error renders children inside its shadow root, so we
+    // check whether the shadow root has any visible content.
+    const hasErrorOverlay = await page.evaluate(() => {
+      const portal = document.querySelector("nextjs-portal");
+      if (!portal?.shadowRoot) return false;
+      return portal.shadowRoot.children.length > 0;
+    });
+    expect(hasErrorOverlay).toBe(false);
   });
 
   test("page has a visible heading", async ({ page }) => {
