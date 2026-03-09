@@ -107,7 +107,7 @@ jobs:
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
       - name: Deploy UI to Vercel (preview)
-        run: npx vercel deploy --cwd ui --token "$VERCEL_TOKEN"
+        run: npx vercel deploy --cwd ui --token "$VERCEL_TOKEN" --build-env NEXT_PUBLIC_CLOUD_MODE=true
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -128,7 +128,7 @@ jobs:
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
       - name: Deploy UI to Vercel (production)
-        run: npx vercel deploy --cwd ui --prod --token "$VERCEL_TOKEN"
+        run: npx vercel deploy --cwd ui --prod --token "$VERCEL_TOKEN" --build-env NEXT_PUBLIC_CLOUD_MODE=true
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}

@@ -8,6 +8,7 @@ const envSchema = z.object({
   CORS_ORIGIN: z.string().default('http://localhost:3000'),
   REDIS_URL: z.string().default('redis://localhost:6379'),
   ANTHROPIC_API_KEY: z.string().optional(),
+  REQUIRE_USER_API_KEYS: z.enum(['true', 'false']).default('true'),
   ENCRYPTION_KEY: z.string().length(64).optional(),
   S3_ENDPOINT: z.string().optional(),
   S3_REGION: z.string().default('auto'),

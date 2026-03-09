@@ -197,7 +197,7 @@ async function cloudSendBrief(
   const briefPrompt = `DIRECTIVE FROM HUMAN FOUNDER:\n\n${data.directive}\n\n---\nProcess this directive according to your CEO role. Decompose into department-level objectives and delegate to your team using the Task tool. Report back with your plan before executing.`;
 
   // Resolve per-org API key, fall back to server-wide key
-  let anthropicKey = env.ANTHROPIC_API_KEY ?? '';
+  let anthropicKey = (env.ANTHROPIC_API_KEY ?? '').trim();
   try {
     const { getOrgSecret } = await import('../repositories/secrets-repo');
     const orgKey = await getOrgSecret(data.orgId, 'anthropic_api_key');
@@ -208,12 +208,25 @@ async function cloudSendBrief(
     // ENCRYPTION_KEY not set or decrypt failed — use server key
   }
 
+  // Fail early with a clear message if no key is available
+  if (!anthropicKey) {
+    if (env.REQUIRE_USER_API_KEYS === 'true') {
+      throw new Error(
+        'No Anthropic API key configured. Add your key in Settings → Account.',
+      );
+    } else {
+      throw new Error(
+        'Platform API key not configured. Contact support.',
+      );
+    }
+  }
+
   // Whitelist only needed env vars — avoid leaking DATABASE_URL, REDIS_URL, etc.
   const engineEnv: Record<string, string> = {
     HOME: process.env.HOME ?? '',
     PATH: process.env.PATH ?? '',
     NODE_ENV: process.env.NODE_ENV ?? 'production',
-    ...(anthropicKey ? { ANTHROPIC_API_KEY: anthropicKey } : {}),
+    ANTHROPIC_API_KEY: anthropicKey,
   };
 
   const ceoModel =
@@ -442,7 +455,7 @@ async function collectAndUploadDeliverables(
 // 5e. BullMQ Queue + Worker setup
 // ---------------------------------------------------------------------------
 
-export const BRIEF_QUEUE_NAME = 'aicib:briefs';
+export const BRIEF_QUEUE_NAME = 'aicib-briefs';
 
 // Module-level worker reference for status checks
 let briefWorkerRef: Worker<BriefJobData> | null = null;

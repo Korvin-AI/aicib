@@ -8,7 +8,7 @@ import { cloudFetch } from "@/lib/cloud-proxy";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  if (isCloudMode()) return cloudFetch(request, "brief", { method: "POST" });
+  if (isCloudMode()) return cloudFetch(request, "briefs", { method: "POST" });
   try {
     const body = await request.json();
     const directive = body?.directive;

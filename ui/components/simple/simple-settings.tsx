@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { formatCurrency } from "@/lib/format";
 import { Switch } from "@/components/ui/switch";
 import { OrgSettingsPanel } from "@/components/org-settings-panel";
+import { ApiKeyForm } from "@/components/api-key-form";
 
 interface SettingsPayload {
   company: {
@@ -19,6 +20,7 @@ interface SettingsPayload {
     hasApiKey: boolean;
     maskedKey?: string;
   };
+  requireUserApiKeys?: boolean;
   settings: {
     costLimitDaily: number;
     costLimitMonthly: number;
@@ -186,6 +188,33 @@ export function SimpleSettings() {
                   : "Claude Code Subscription"
               }
             />
+
+            {isCloudMode && (
+              <div
+                style={{
+                  padding: "12px 16px",
+                  borderRadius: 10,
+                  border: "1px solid var(--s-border-light)",
+                  backgroundColor: "var(--s-surface-primary)",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: "var(--s-text-secondary)",
+                    marginBottom: 8,
+                  }}
+                >
+                  Anthropic API Key
+                </div>
+                <ApiKeyForm
+                  hasApiKey={data.engine.hasApiKey}
+                  maskedKey={data.engine.maskedKey}
+                  requireUserApiKeys={data.requireUserApiKeys ?? false}
+                />
+              </div>
+            )}
 
             {/* Pro Mode Toggle */}
             <div

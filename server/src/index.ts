@@ -86,6 +86,7 @@ businessRoutes.use('/export/*', rlsMiddleware);
 
 // RBAC: member+ required for brief submission
 businessRoutes.use('/brief/*', requireRole('member'));
+businessRoutes.use('/briefs/*', requireRole('member'));
 
 // RBAC: admin+ required for admin routes (settings RBAC is inline on PUT/DELETE)
 businessRoutes.use('/setup/*', requireRole('admin'));
