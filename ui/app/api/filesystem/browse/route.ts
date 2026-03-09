@@ -2,12 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { isCloudMode } from "@/lib/cloud-mode";
 
 export const dynamic = "force-dynamic";
 
 const MAX_ENTRIES = 200;
 
 export async function GET(req: NextRequest) {
+  if (isCloudMode()) {
+    return NextResponse.json({ error: "Not available in cloud mode" }, { status: 404 });
+  }
+
   try {
     const rawPath = req.nextUrl.searchParams.get("path") || os.homedir();
     const dirPath = path.resolve(rawPath);

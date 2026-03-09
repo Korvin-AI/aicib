@@ -3,6 +3,8 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { getAicibBin, tryGetProjectDir } from "@/lib/config";
+import { isCloudMode } from "@/lib/cloud-mode";
+import { cloudFetch } from "@/lib/cloud-proxy";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +21,7 @@ interface InitRequestBody {
 }
 
 export async function POST(request: Request) {
+  if (isCloudMode()) return cloudFetch(request, "setup/init", { method: "POST" });
   try {
     const body = (await request.json()) as InitRequestBody;
 

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { jsonError, safeAll, safeGet, tableExists } from "@/lib/api-helpers";
 import { readAppConfig } from "@/lib/config-read";
+import { isCloudMode } from "@/lib/cloud-mode";
+import { cloudFetch } from "@/lib/cloud-proxy";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +24,8 @@ function parseNestedBoolean(
   return value === "true";
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  if (isCloudMode()) return cloudFetch(request, "settings");
   try {
     const db = getDb();
     const config = readAppConfig();

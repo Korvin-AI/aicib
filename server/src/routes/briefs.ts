@@ -108,6 +108,11 @@ briefs.post('/', requireRole('member'), async (c) => {
     })
     .returning();
 
+  // Bifurcate: local mode skips BullMQ (daemon picks up queued jobs)
+  if (business.executionMode === 'local') {
+    return c.json({ jobId: job.id, status: 'queued' }, 202);
+  }
+
   // Enqueue BullMQ job — mark failed if enqueue fails
   try {
     await getBriefQueue().add('brief', {

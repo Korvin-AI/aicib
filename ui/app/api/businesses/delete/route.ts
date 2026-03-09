@@ -5,6 +5,8 @@ import { NextResponse } from "next/server";
 import { getBusinessById, removeBusiness } from "@/lib/business-registry";
 import { getBusinessHealth } from "@/lib/business-context";
 import { stopBusinessSync } from "@/lib/business-commands";
+import { isCloudMode } from "@/lib/cloud-mode";
+import { cloudFetchOrg } from "@/lib/cloud-proxy";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +32,8 @@ function isSafeToDelete(projectDir: string): boolean {
 }
 
 export async function POST(request: Request) {
+  if (isCloudMode()) return cloudFetchOrg(request, "businesses/delete", { method: "POST" });
+
   try {
     const body = (await request.json().catch(() => ({}))) as DeleteRequestBody;
     const businessId = body.businessId?.trim();

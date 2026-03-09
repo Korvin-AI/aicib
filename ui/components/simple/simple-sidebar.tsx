@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useSSE } from "@/components/sse-provider";
 import { BusinessSwitcher } from "@/components/business-switcher";
+import { useAuth } from "@/lib/auth-context";
 
 const navItems = [
   { href: "/", label: "Overview" },
@@ -17,6 +18,7 @@ const navItems = [
 export function SimpleSidebar() {
   const pathname = usePathname();
   const { lastEvent } = useSSE();
+  const { user, isCloudMode, logout } = useAuth();
   const [sessionActive, setSessionActive] = useState(false);
 
   useEffect(() => {
@@ -153,6 +155,63 @@ export function SimpleSidebar() {
           </span>
         </div>
       </div>
+
+      {/* User info (cloud mode only) */}
+      {isCloudMode && user && (
+        <div
+          style={{
+            padding: "12px 20px",
+            borderTop: "1px solid var(--s-border-light)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 500,
+                color: "var(--s-text-primary)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {user.displayName || user.email}
+            </div>
+            {user.displayName && (
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "var(--s-text-tertiary)",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {user.email}
+              </div>
+            )}
+          </div>
+          <button
+            onClick={logout}
+            style={{
+              marginLeft: 8,
+              padding: 4,
+              borderRadius: 4,
+              border: "none",
+              background: "none",
+              cursor: "pointer",
+              color: "var(--s-text-tertiary)",
+              fontSize: 11,
+            }}
+            title="Log out"
+          >
+            Logout
+          </button>
+        </div>
+      )}
     </aside>
   );
 }

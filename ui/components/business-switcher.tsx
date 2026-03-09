@@ -19,6 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { BusinessDeleteDialog } from "@/components/business-delete-dialog";
+import { useAuth } from "@/lib/auth-context";
 
 interface BusinessListItem {
   id: string;
@@ -36,6 +37,7 @@ interface BusinessesPayload {
 
 export function BusinessSwitcher() {
   const router = useRouter();
+  const auth = useAuth();
   const [data, setData] = useState<BusinessesPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [switchingId, setSwitchingId] = useState<string | null>(null);
@@ -46,6 +48,11 @@ export function BusinessSwitcher() {
   } | null>(null);
 
   async function loadBusinesses() {
+    if (auth.isCloudMode) {
+      // In cloud mode, use auth context for business list
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch("/api/businesses", { cache: "no-store" });
@@ -62,26 +69,50 @@ export function BusinessSwitcher() {
 
   useEffect(() => {
     loadBusinesses();
-  }, []);
+  }, [auth.isCloudMode]);
+
+  // In cloud mode, derive data from auth context
+  const effectiveData = useMemo<BusinessesPayload | null>(() => {
+    if (auth.isCloudMode) {
+      return {
+        activeBusinessId: auth.activeBusinessId,
+        hasAnyBusiness: auth.businesses.length > 0,
+        businesses: auth.businesses.map((b) => ({
+          id: b.id,
+          name: b.name,
+          projectDir: "",
+          template: b.template,
+          sessionActive: false,
+        })),
+      };
+    }
+    return data;
+  }, [auth.isCloudMode, auth.businesses, auth.activeBusinessId, data]);
 
   const activeBusiness = useMemo(
     () =>
-      data?.businesses.find((business) => business.id === data.activeBusinessId) ??
-      null,
-    [data]
+      effectiveData?.businesses.find(
+        (business) => business.id === effectiveData.activeBusinessId
+      ) ?? null,
+    [effectiveData]
   );
 
   async function handleSelect(businessId: string) {
-    if (switchingId || businessId === data?.activeBusinessId) return;
+    if (switchingId || businessId === effectiveData?.activeBusinessId) return;
     setSwitchingId(businessId);
     try {
-      const res = await fetch("/api/businesses/select", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ businessId }),
-      });
-      if (res.ok) {
+      if (auth.isCloudMode) {
+        auth.selectBusiness(businessId);
         window.location.reload();
+      } else {
+        const res = await fetch("/api/businesses/select", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ businessId }),
+        });
+        if (res.ok) {
+          window.location.reload();
+        }
       }
     } finally {
       setSwitchingId(null);
@@ -112,9 +143,9 @@ export function BusinessSwitcher() {
           <DropdownMenuLabel>Businesses</DropdownMenuLabel>
           <DropdownMenuSeparator />
 
-          {data?.businesses.length ? (
-            data.businesses.map((business) => {
-              const active = data.activeBusinessId === business.id;
+          {effectiveData?.businesses.length ? (
+            effectiveData.businesses.map((business) => {
+              const active = effectiveData.activeBusinessId === business.id;
               return (
                 <DropdownMenuItem
                   key={business.id}

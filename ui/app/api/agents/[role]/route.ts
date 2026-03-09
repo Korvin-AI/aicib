@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { jsonError, safeAll, safeGet, tableExists } from "@/lib/api-helpers";
 import { readAppConfig } from "@/lib/config-read";
+import { isCloudMode } from "@/lib/cloud-mode";
+import { cloudFetch } from "@/lib/cloud-proxy";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +11,10 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ role: string }> }
 ) {
+  if (isCloudMode()) {
+    const { role } = await params;
+    return cloudFetch(_request, `agents/${role}`);
+  }
   try {
     const db = getDb();
     const { role } = await params;

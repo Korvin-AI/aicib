@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useUIPreferences } from "@/lib/ui-preferences";
+import { useAuth } from "@/lib/auth-context";
 import { formatCurrency } from "@/lib/format";
 import { Switch } from "@/components/ui/switch";
+import { OrgSettingsPanel } from "@/components/org-settings-panel";
 
 interface SettingsPayload {
   company: {
@@ -11,6 +13,7 @@ interface SettingsPayload {
     template: string;
     projectDir: string;
   };
+  executionMode?: "cloud" | "local";
   engine: {
     mode: "claude-code" | "claude-api";
     hasApiKey: boolean;
@@ -38,7 +41,7 @@ interface SettingsPayload {
   };
 }
 
-const TABS = [
+const BASE_TABS = [
   { id: "profile", label: "Profile" },
   { id: "budget", label: "Budget" },
   { id: "notifications", label: "Notifications" },
@@ -46,13 +49,22 @@ const TABS = [
   { id: "account", label: "Account" },
 ] as const;
 
-type TabId = (typeof TABS)[number]["id"];
+type TabId = (typeof BASE_TABS)[number]["id"] | "team";
 
 export function SimpleSettings() {
   const { uiMode, setUiMode } = useUIPreferences();
+  const { isCloudMode } = useAuth();
   const [data, setData] = useState<SettingsPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>("profile");
+
+  const TABS = useMemo(() => {
+    const tabs = [...BASE_TABS] as Array<{ id: TabId; label: string }>;
+    if (isCloudMode) {
+      tabs.splice(tabs.length - 1, 0, { id: "team", label: "Team" });
+    }
+    return tabs;
+  }, [isCloudMode]);
   const [statusData, setStatusData] = useState<{
     costs?: { today?: number; month?: number };
   } | null>(null);
@@ -138,6 +150,10 @@ export function SimpleSettings() {
         return (
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <SettingRow
+              label="Execution Mode"
+              value={data.executionMode === "local" ? "Local CLI" : "Cloud"}
+            />
+            <SettingRow
               label="Safeguards"
               value={data.settings.safeguardsEnabled ? "Enabled" : "Disabled"}
             />
@@ -155,6 +171,9 @@ export function SimpleSettings() {
             />
           </div>
         );
+
+      case "team":
+        return <OrgSettingsPanel />;
 
       case "account":
         return (

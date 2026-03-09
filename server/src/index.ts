@@ -27,6 +27,7 @@ import { setup } from './routes/setup';
 import { stream } from './routes/stream';
 import { businessesRoute } from './routes/businesses';
 import { orgRoute } from './routes/org';
+import { daemonRoute } from './routes/daemon';
 import { storageRoute } from './routes/storage';
 import { exportRoute } from './routes/export';
 import { startBriefWorker, closeBriefQueue } from './workers/brief-worker';
@@ -57,6 +58,7 @@ orgRoutes.use('*', authMiddleware);
 orgRoutes.use('*', rateLimitMiddleware);
 orgRoutes.route('/businesses', businessesRoute);
 orgRoutes.route('/org', orgRoute);
+orgRoutes.route('/daemon', daemonRoute);
 app.route('/', orgRoutes);
 
 // Protected business routes (auth + tenant + rate-limit)

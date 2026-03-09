@@ -2,10 +2,13 @@ import { NextResponse } from "next/server";
 import { spawn } from "node:child_process";
 import { getAicibBin, tryGetProjectDir } from "@/lib/config";
 import { getDb } from "@/lib/db";
+import { isCloudMode } from "@/lib/cloud-mode";
+import { cloudFetch } from "@/lib/cloud-proxy";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  if (isCloudMode()) return cloudFetch(request, "brief", { method: "POST" });
   try {
     const body = await request.json();
     const directive = body?.directive;

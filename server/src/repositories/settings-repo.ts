@@ -25,7 +25,7 @@ export async function getSettings(businessId: string) {
     events,
   ] = await Promise.all([
     db
-      .select({ config: businesses.config, name: businesses.name, template: businesses.template })
+      .select({ config: businesses.config, name: businesses.name, template: businesses.template, executionMode: businesses.executionMode })
       .from(businesses)
       .where(eq(businesses.id, businessId))
       .limit(1),
@@ -94,6 +94,7 @@ export async function getSettings(businessId: string) {
       template: business?.template ?? '',
       projectDir: null,
     },
+    executionMode: business?.executionMode ?? 'cloud',
     engine: {
       mode: 'cloud' as const,
       hasApiKey: false,

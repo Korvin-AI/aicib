@@ -1,5 +1,7 @@
 import { openReadOnlyDb } from "@/lib/db";
 import type Database from "better-sqlite3";
+import { isCloudMode, getCloudApiUrl } from "@/lib/cloud-mode";
+import { getAuthCookies } from "@/lib/cloud-proxy";
 
 export const dynamic = "force-dynamic";
 
@@ -88,7 +90,36 @@ function getNewLogs(
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  if (isCloudMode()) {
+    const { token, businessId } = getAuthCookies(request);
+
+    if (!token || !businessId) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(businessId)) {
+      return new Response("Invalid business", { status: 400 });
+    }
+
+    const cloudUrl = `${getCloudApiUrl()}/businesses/${businessId}/stream`;
+    const upstream = await fetch(cloudUrl, {
+      headers: { Cookie: `aicib_session=${token}` },
+    });
+
+    if (!upstream.ok || !upstream.body) {
+      return new Response("Upstream error", { status: upstream.status });
+    }
+
+    return new Response(upstream.body, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
+  }
+
   let db: Database.Database | null = null;
 
   try {

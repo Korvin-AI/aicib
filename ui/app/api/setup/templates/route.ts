@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { isCloudMode } from "@/lib/cloud-mode";
+import { cloudFetch } from "@/lib/cloud-proxy";
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +69,7 @@ const templates = [
   },
 ];
 
-export async function GET() {
+export async function GET(request: Request) {
+  if (isCloudMode()) return cloudFetch(request, "setup/templates");
   return NextResponse.json({ templates });
 }

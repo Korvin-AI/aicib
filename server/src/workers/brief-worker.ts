@@ -469,7 +469,13 @@ export function getBriefQueue(): Queue<BriefJobData> {
   return briefQueue;
 }
 
+let sweepInterval: ReturnType<typeof setInterval> | null = null;
+
 export async function closeBriefQueue(): Promise<void> {
+  if (sweepInterval) {
+    clearInterval(sweepInterval);
+    sweepInterval = null;
+  }
   if (briefQueue) {
     await briefQueue.close();
     briefQueue = null;
@@ -479,7 +485,9 @@ export async function closeBriefQueue(): Promise<void> {
 /** Sweep stale running jobs older than 15 minutes → failed */
 async function sweepStaleJobs(): Promise<void> {
   const fifteenMinAgo = new Date(Date.now() - 15 * 60 * 1000);
+  const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000);
   try {
+    // Sweep stale 'running' cloud jobs
     await db
       .update(backgroundJobs)
       .set({
@@ -493,14 +501,28 @@ async function sweepStaleJobs(): Promise<void> {
           lt(backgroundJobs.startedAt, fifteenMinAgo),
         ),
       );
+
+    // Sweep stale 'claimed' daemon jobs (daemon crashed after claiming)
+    await db
+      .update(backgroundJobs)
+      .set({
+        status: 'queued',
+      })
+      .where(
+        and(
+          eq(backgroundJobs.status, 'claimed'),
+          lt(backgroundJobs.startedAt, tenMinAgo),
+        ),
+      );
   } catch (err) {
     console.error('Stale job sweep error:', (err as Error).message);
   }
 }
 
 export async function startBriefWorker(): Promise<Worker<BriefJobData>> {
-  // Sweep stale jobs on startup
+  // Sweep stale jobs on startup + periodically every 5 minutes
   await sweepStaleJobs();
+  sweepInterval = setInterval(() => sweepStaleJobs().catch(console.error), 5 * 60 * 1000);
 
   briefWorkerRef = new Worker<BriefJobData>(
     BRIEF_QUEUE_NAME,
