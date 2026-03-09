@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { jsonError, parsePagination, safeAll, safeGet, tableExists } from "@/lib/api-helpers";
+import { isCloudMode } from "@/lib/cloud-mode";
+import { cloudFetch } from "@/lib/cloud-proxy";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  if (isCloudMode()) return cloudFetch(request, "projects");
   try {
     const db = getDb();
     const { searchParams } = new URL(request.url);

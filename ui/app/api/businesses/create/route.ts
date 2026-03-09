@@ -9,6 +9,8 @@ import {
 } from "@/lib/business-commands";
 import { upsertBusiness } from "@/lib/business-registry";
 import { getDbForProject, ensureWikiTable } from "@/lib/db-project";
+import { isCloudMode } from "@/lib/cloud-mode";
+import { cloudFetchOrg } from "@/lib/cloud-proxy";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +62,16 @@ function parseConfigMetadata(projectDir: string): { name: string; template: stri
 }
 
 export async function POST(request: Request) {
+  if (isCloudMode()) {
+    try {
+      const body = await request.json();
+      const cloudBody = JSON.stringify({ name: body.companyName || body.name, template: body.template });
+      return cloudFetchOrg(request, "businesses", { method: "POST", body: cloudBody });
+    } catch {
+      return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    }
+  }
+
   try {
     const body = (await request.json()) as CreateBusinessRequestBody;
 

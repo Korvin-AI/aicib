@@ -5,6 +5,7 @@ import { Topbar } from "@/components/topbar";
 import { SSEProvider } from "@/components/sse-provider";
 import { BusinessBootstrapGuard } from "@/components/business-bootstrap-guard";
 import { UIPreferencesProvider, useUIPreferences } from "@/lib/ui-preferences";
+import { AuthProvider } from "@/lib/auth-context";
 import { SimpleSidebar } from "@/components/simple/simple-sidebar";
 import { LiveActivitySidebar } from "@/components/simple/live-activity-sidebar";
 
@@ -65,10 +66,12 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <SSEProvider>
-      <UIPreferencesProvider>
-        <DashboardShell>{children}</DashboardShell>
-      </UIPreferencesProvider>
-    </SSEProvider>
+    <AuthProvider>
+      <SSEProvider>
+        <UIPreferencesProvider>
+          <DashboardShell>{children}</DashboardShell>
+        </UIPreferencesProvider>
+      </SSEProvider>
+    </AuthProvider>
   );
 }

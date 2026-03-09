@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { getBusinessHealth, getResolvedBusiness } from "@/lib/business-context";
 import { listBusinesses, readBusinessRegistry } from "@/lib/business-registry";
+import { isCloudMode } from "@/lib/cloud-mode";
+import { cloudFetch } from "@/lib/cloud-proxy";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
+  if (isCloudMode()) return cloudFetch(request, "setup/status");
   try {
     const registry = readBusinessRegistry();
     const businesses = listBusinesses();

@@ -1,7 +1,9 @@
 "use client";
 
 import { useUIPreferences } from "@/lib/ui-preferences";
+import { useAuth } from "@/lib/auth-context";
 import { SimpleSettings } from "@/components/simple/simple-settings";
+import { OrgSettingsPanel } from "@/components/org-settings-panel";
 import { useEffect, useMemo, useState } from "react";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { StatCard } from "@/components/stat-card";
@@ -45,6 +47,7 @@ interface SettingsPayload {
 
 function ProSettingsPage() {
   const { uiMode, setUiMode } = useUIPreferences();
+  const { isCloudMode } = useAuth();
   const [data, setData] = useState<SettingsPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -261,6 +264,14 @@ function ProSettingsPage() {
           getRowKey={(row, index) => String(row.id || index)}
         />
       </section>
+
+      {/* Organization (cloud mode only) */}
+      {isCloudMode && (
+        <section className="mb-4 rounded-lg border border-border/80 bg-card p-3">
+          <h2 className="mb-2 text-[13px] font-medium">Organization</h2>
+          <OrgSettingsPanel />
+        </section>
+      )}
 
       {/* UI Mode Toggle */}
       <section className="mb-4 rounded-lg border-2 border-primary/20 bg-card p-3">

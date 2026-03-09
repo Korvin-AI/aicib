@@ -3,10 +3,13 @@ import { execFileSync } from "node:child_process";
 import { getDb } from "@/lib/db";
 import { getProjectDir, getAicibBin } from "@/lib/config";
 import { jsonError, safeAll, tableExists } from "@/lib/api-helpers";
+import { isCloudMode } from "@/lib/cloud-mode";
+import { cloudFetch } from "@/lib/cloud-proxy";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  if (isCloudMode()) return cloudFetch(request, "knowledge");
   try {
     const db = getDb();
     const { searchParams } = new URL(request.url);
@@ -82,6 +85,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (isCloudMode()) return cloudFetch(request, "knowledge", { method: "POST" });
   try {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type");

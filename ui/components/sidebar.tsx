@@ -13,9 +13,11 @@ import {
   Notebook,
   FolderKanban,
   Settings,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BusinessSwitcher } from "@/components/business-switcher";
+import { useAuth } from "@/lib/auth-context";
 
 const navItems = [
   { href: "/", label: "Home", icon: LayoutDashboard },
@@ -32,6 +34,7 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { user, isCloudMode, logout } = useAuth();
 
   return (
     <aside className="flex h-full w-60 flex-col border-r border-sidebar-border bg-sidebar/95 backdrop-blur">
@@ -66,7 +69,29 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t border-sidebar-border px-5 py-3">
-        <p className="text-[11px] text-sidebar-foreground/45">v0.1.0</p>
+        {isCloudMode && user ? (
+          <div className="flex items-center justify-between">
+            <div className="min-w-0">
+              <p className="truncate text-[12px] font-medium text-sidebar-foreground/80">
+                {user.displayName || user.email}
+              </p>
+              {user.displayName && (
+                <p className="truncate text-[11px] text-sidebar-foreground/45">
+                  {user.email}
+                </p>
+              )}
+            </div>
+            <button
+              onClick={logout}
+              className="ml-2 rounded p-1 text-sidebar-foreground/40 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              title="Log out"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ) : (
+          <p className="text-[11px] text-sidebar-foreground/45">v0.1.0</p>
+        )}
       </div>
     </aside>
   );
