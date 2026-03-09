@@ -113,7 +113,7 @@ app.route('/businesses/:businessId', businessRoutes);
 
 // Start server
 async function main() {
-  initSentry();
+  await initSentry();
 
   try {
     await runMigrations();
