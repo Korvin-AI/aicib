@@ -9,8 +9,8 @@ interface ScrapeRequestBody {
   projectDir: string;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function scrapeWithRetry(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   client: any,
   url: string
 ): Promise<string> {
