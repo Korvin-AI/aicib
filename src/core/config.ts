@@ -51,12 +51,18 @@ export interface SettingsConfig {
   auto_start_workers: boolean;
 }
 
+export interface CloudConfig {
+  businessId: string;
+  linkedAt: string;
+}
+
 export interface AicibConfig {
   company: CompanyConfig;
   agents: Record<string, AgentConfig>;
   settings: SettingsConfig;
   engine?: EngineConfig;
   persona?: PersonaConfig;
+  cloud?: CloudConfig;
   extensions: Record<string, unknown>;
 }
 
@@ -84,7 +90,7 @@ export interface ConfigExtension {
 
 const configExtensions: ConfigExtension[] = [];
 
-const RESERVED_CONFIG_KEYS = new Set(["company", "agents", "settings", "engine", "persona"]);
+const RESERVED_CONFIG_KEYS = new Set(["company", "agents", "settings", "engine", "persona", "cloud"]);
 
 /**
  * Register a config extension so that a feature's config section is
@@ -142,11 +148,15 @@ export function saveConfig(projectDir: string, config: AicibConfig): void {
   const configPath = getConfigPath(projectDir);
 
   // Flatten extensions to top-level YAML keys (so the YAML reads naturally)
-  const { extensions, engine, ...coreConfig } = config;
+  const { extensions, engine, cloud, ...coreConfig } = config;
   const toSave: Record<string, unknown> = { ...coreConfig };
   // Only write engine section if it's non-default (avoid cluttering config for subscription users)
   if (engine && (engine.mode !== "claude-code" || engine.api_key)) {
     toSave.engine = engine;
+  }
+  // Only write cloud section if linked
+  if (cloud?.businessId) {
+    toSave.cloud = cloud;
   }
   if (extensions) {
     for (const [key, value] of Object.entries(extensions)) {
@@ -391,6 +401,14 @@ export function validateConfig(raw: Record<string, unknown>): AicibConfig {
     }
   }
 
+  // Validate cloud config (optional section)
+  if (raw.cloud && typeof raw.cloud === "object") {
+    const cloud = raw.cloud as Record<string, unknown>;
+    if (!cloud.businessId || typeof cloud.businessId !== "string") {
+      errors.push("cloud.businessId must be a non-empty string");
+    }
+  }
+
   // Validate engine config (optional section)
   const VALID_ENGINE_MODES: EngineMode[] = ["claude-code", "claude-api"];
   if (raw.engine && typeof raw.engine === "object") {
@@ -438,7 +456,7 @@ export function validateConfig(raw: Record<string, unknown>): AicibConfig {
   }
 
   // Preserve unrecognized top-level keys for round-trip safety
-  const knownKeys = new Set(["company", "agents", "settings", "engine", "persona", ...configExtensions.map((e) => e.key)]);
+  const knownKeys = new Set(["company", "agents", "settings", "engine", "persona", "cloud", ...configExtensions.map((e) => e.key)]);
   for (const [key, value] of Object.entries(raw)) {
     if (!knownKeys.has(key) && !(key in extensions)) {
       extensions[key] = value;
@@ -493,6 +511,9 @@ export function validateConfig(raw: Record<string, unknown>): AicibConfig {
     },
     engine: engineConfig,
     persona: personaConfig,
+    ...(raw.cloud && typeof raw.cloud === "object"
+      ? { cloud: raw.cloud as CloudConfig }
+      : {}),
     extensions,
   };
 }

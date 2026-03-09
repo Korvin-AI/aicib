@@ -39,6 +39,11 @@ export function jobChannel(businessId: string, jobId: number): string {
   return `aicib:events:${businessId}:job:${jobId}`;
 }
 
+/** Check if the pub client exists without creating one */
+export function hasPubClient(): boolean {
+  return pubClient !== null;
+}
+
 /** Graceful shutdown */
 export async function closeRedis(): Promise<void> {
   if (pubClient) {

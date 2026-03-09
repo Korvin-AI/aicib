@@ -126,7 +126,7 @@ test.describe("Sidebar navigation smoke", () => {
     expect(linkCount).toBeGreaterThanOrEqual(NAV_ITEMS.length);
 
     // Verify each link points to a known route.
-    const knownHrefs = new Set(NAV_ITEMS.map((item) => item.href));
+    const knownHrefs = new Set<string>(NAV_ITEMS.map((item) => item.href));
     for (let i = 0; i < linkCount; i++) {
       const href = await navLinks.nth(i).getAttribute("href");
       expect(

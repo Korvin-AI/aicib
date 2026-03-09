@@ -69,7 +69,7 @@ export async function POST(request: Request) {
 
     // Delete files FIRST (before registry removal) so a failure leaves registry intact
     let filesDeleted = false;
-    let filesError: string | null = null;
+    const filesError: string | null = null;
 
     if (body.deleteFiles) {
       if (!isSafeToDelete(business.projectDir)) {

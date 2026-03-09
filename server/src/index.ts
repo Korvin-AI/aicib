@@ -33,6 +33,7 @@ import { exportRoute } from './routes/export';
 import { startBriefWorker, closeBriefQueue } from './workers/brief-worker';
 import { closeRedis } from './realtime/redis';
 import { runMigrations } from './db/migrate';
+import { initSentry } from './monitoring/sentry';
 
 const app = new Hono();
 
@@ -112,6 +113,8 @@ app.route('/businesses/:businessId', businessRoutes);
 
 // Start server
 async function main() {
+  await initSentry();
+
   try {
     await runMigrations();
   } catch (err) {
