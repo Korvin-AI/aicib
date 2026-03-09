@@ -5,15 +5,17 @@ import { setCookie, getCookie, deleteCookie } from 'hono/cookie';
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { db } from '../db/connection';
-import { users, organizations, orgMemberships, orgInvitations, authSessions } from '../db/schema/index';
+import { users, organizations, orgMemberships, orgInvitations, authSessions, apiKeys } from '../db/schema/index';
 import { hashPassword, verifyPassword } from '../utils/password';
 import { generateSessionToken } from '../utils/token';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { findUserById, verifyUserPassword } from '../repositories/user-repo';
 import { createSession, deleteSession } from '../repositories/session-repo';
 import { findOrgByUserId } from '../repositories/org-repo';
 import { findBusinessesByOrg } from '../repositories/business-repo';
 import { authMiddleware } from '../middleware/auth';
+import { requireRole } from '../middleware/rbac';
+import { rateLimitMiddleware } from '../middleware/rate-limit';
 import { env } from '../env';
 import type { AuthContext } from '../types';
 
@@ -321,6 +323,38 @@ auth.post(
       orgId: result.orgId,
       role: result.role,
     });
+  },
+);
+
+// POST /auth/api-key — generate a persistent API key (admin only)
+auth.post(
+  '/auth/api-key',
+  authMiddleware,
+  requireRole('admin'),
+  rateLimitMiddleware,
+  zValidator('json', z.object({ name: z.string().max(255).default('cli') })),
+  async (c) => {
+    const { orgId } = c.get('auth');
+    const { name } = c.req.valid('json');
+
+    // Generate a random API key: aicib_<48 hex chars>
+    const rawKey = `aicib_${randomBytes(24).toString('hex')}`;
+    const keyHash = hashToken(rawKey);
+    const keyPrefix = rawKey.slice(0, 12);
+
+    // 1-year expiry
+    const expiresAt = new Date();
+    expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+
+    await db.insert(apiKeys).values({
+      orgId,
+      name,
+      keyHash,
+      keyPrefix,
+      expiresAt,
+    });
+
+    return c.json({ apiKey: rawKey, expiresAt: expiresAt.toISOString() }, 201);
   },
 );
 

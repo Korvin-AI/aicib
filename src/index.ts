@@ -129,6 +129,7 @@ import {
   scheduleStatusCommand,
 } from "./cli/schedule.js";
 import { exportCommand, importCommand } from "./cli/data-export.js";
+import { cloudSignupCommand, cloudLinkCommand } from "./cli/cloud.js";
 import {
   notificationsCommand,
   notificationsListCommand,
@@ -886,5 +887,19 @@ program
   .option("--force", "Overwrite existing config without prompting")
   .option("--company-name <name>", "Company name for anonymized packages")
   .action(importCommand);
+
+// --- Cloud CLI (admin) ---
+const cloud = program.command("cloud").description("Cloud account management (admin)");
+cloud
+  .command("signup")
+  .description("Create a cloud account and generate API key")
+  .option("-d, --dir <dir>", "Project directory", process.cwd())
+  .action(cloudSignupCommand);
+cloud
+  .command("link")
+  .description("Link local project to a cloud business")
+  .option("-d, --dir <dir>", "Project directory", process.cwd())
+  .option("-f, --force", "Re-link even if already linked")
+  .action(cloudLinkCommand);
 
 program.parse();

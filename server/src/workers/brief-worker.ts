@@ -444,6 +444,20 @@ async function collectAndUploadDeliverables(
 
 export const BRIEF_QUEUE_NAME = 'aicib:briefs';
 
+// Module-level worker reference for status checks
+let briefWorkerRef: Worker<BriefJobData> | null = null;
+let activeJobCount = 0;
+
+export function getWorkerStatus(): { running: boolean; activeCount: number } {
+  if (!briefWorkerRef) {
+    return { running: false, activeCount: 0 };
+  }
+  return {
+    running: briefWorkerRef.isRunning(),
+    activeCount: activeJobCount,
+  };
+}
+
 let briefQueue: Queue<BriefJobData> | null = null;
 
 export function getBriefQueue(): Queue<BriefJobData> {
@@ -488,11 +502,13 @@ export async function startBriefWorker(): Promise<Worker<BriefJobData>> {
   // Sweep stale jobs on startup
   await sweepStaleJobs();
 
-  const worker = new Worker<BriefJobData>(
+  briefWorkerRef = new Worker<BriefJobData>(
     BRIEF_QUEUE_NAME,
     async (job) => {
       const data = job.data;
       const tracker = new CloudCostTracker(data.orgId, data.businessId, data.jobId);
+
+      activeJobCount++;
 
       // Mark job as running
       await tracker.updateBackgroundJob(data.jobId, {
@@ -553,6 +569,8 @@ export async function startBriefWorker(): Promise<Worker<BriefJobData>> {
           completedAt: new Date(),
         });
         await tracker.setAgentStatus('ceo', 'error');
+      } finally {
+        activeJobCount--;
       }
     },
     {
@@ -561,10 +579,10 @@ export async function startBriefWorker(): Promise<Worker<BriefJobData>> {
     },
   );
 
-  worker.on('failed', (job, err) => {
+  briefWorkerRef.on('failed', (job, err) => {
     console.error(`BullMQ job ${job?.id} failed:`, err.message);
   });
 
   console.log('Brief worker started (concurrency: 2)');
-  return worker;
+  return briefWorkerRef;
 }

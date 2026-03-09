@@ -2,10 +2,14 @@ import type { ErrorHandler } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { env } from '../env';
 import { AppError } from '../utils/errors';
+import { captureError } from '../monitoring/sentry';
 
 export const errorHandler: ErrorHandler = (err, c) => {
   if (err instanceof AppError) {
-    if (err.status >= 500) console.error('Server error:', err);
+    if (err.status >= 500) {
+      console.error('Server error:', err);
+      captureError(err);
+    }
     return c.json(
       {
         error: err.message,
@@ -40,6 +44,10 @@ export const errorHandler: ErrorHandler = (err, c) => {
               : statusCode >= 500
                 ? 'INTERNAL_ERROR'
                 : 'VALIDATION_ERROR';
+
+  if (statusCode >= 500) {
+    captureError(err instanceof Error ? err : new Error(String(err)));
+  }
 
   return c.json({ error: message, code }, statusCode as ContentfulStatusCode);
 };

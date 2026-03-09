@@ -3,18 +3,133 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
+    branches: [main]
+  workflow_dispatch:
     branches: [main]
 
 jobs:
-  build:
+  lint-typecheck:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        workspace:
+          - { name: root, dir: '.' }
+          - { name: server, dir: 'server' }
+          - { name: ui, dir: 'ui' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 22
           cache: npm
-          cache-dependency-path: package-lock.json
+          cache-dependency-path: ${{ matrix.workspace.dir }}/package-lock.json
       - run: npm ci
+        working-directory: ${{ matrix.workspace.dir }}
+      - run: npx tsc --noEmit
+        working-directory: ${{ matrix.workspace.dir }}
+      - if: matrix.workspace.name == 'server' || matrix.workspace.name == 'ui'
+        run: npm run lint
+        working-directory: ${{ matrix.workspace.dir }}
+
+  test-server:
+    runs-on: ubuntu-latest
+    needs: lint-typecheck
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: aicib
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: aicib_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aicib"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+        working-directory: server
       - run: npm run build
+        working-directory: server
+      - run: npm test
+        working-directory: server
+        env:
+          DATABASE_URL: postgresql://aicib:test_password@localhost:5432/aicib_test
+          REDIS_URL: redis://localhost:6379
+
+  test-ui:
+    runs-on: ubuntu-latest
+    needs: lint-typecheck
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: npm ci
+        working-directory: ui
+      - run: npx playwright install chromium --with-deps
+      - run: npx playwright test
+        working-directory: ui
+
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: [test-server, test-ui]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Deploy server to Railway (staging)
+        run: npx @railway/cli deploy --service aicib-api
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      - name: Deploy UI to Vercel (preview)
+        run: npx vercel deploy --cwd ui --token "$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+  deploy-prod:
+    runs-on: ubuntu-latest
+    needs: [test-server, test-ui]
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Deploy server to Railway (production)
+        run: npx @railway/cli deploy --service aicib-api --environment production
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      - name: Deploy UI to Vercel (production)
+        run: npx vercel deploy --cwd ui --prod --token "$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
