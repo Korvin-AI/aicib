@@ -6,6 +6,13 @@ import { useEffect, useMemo, useState } from "react";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { StatCard } from "@/components/stat-card";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 
 interface SettingsPayload {
@@ -14,6 +21,7 @@ interface SettingsPayload {
     template: string;
     projectDir: string;
   };
+  executionMode?: "cloud" | "local";
   engine: {
     mode: "claude-code" | "claude-api";
     hasApiKey: boolean;
@@ -175,7 +183,7 @@ function ProSettingsPage() {
         {loading || !data ? (
           <p className="text-[13px] text-muted-foreground">Loading engine settings...</p>
         ) : (
-          <div className="space-y-1 text-[13px]">
+          <div className="space-y-2 text-[13px]">
             <p>Mode: <span className="text-muted-foreground">
               {data.engine.mode === "claude-api" ? "Anthropic API Key" : "Claude Code Subscription"}
             </span></p>
@@ -184,7 +192,43 @@ function ProSettingsPage() {
                 {data.engine.hasApiKey ? data.engine.maskedKey : "Not configured"}
               </span></p>
             )}
-            <p className="text-[11px] text-muted-foreground/70">Change via <code className="rounded bg-muted px-1">aicib config</code></p>
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">Execution:</span>
+              <Select
+                value={data.executionMode ?? "cloud"}
+                onValueChange={async (value: string) => {
+                  const prev = data.executionMode;
+                  try {
+                    const resp = await fetch("/api/settings/execution-mode", {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ executionMode: value }),
+                    });
+                    if (!resp.ok) {
+                      setError(`Failed to update execution mode (${resp.status})`);
+                      return;
+                    }
+                    setData({ ...data, executionMode: value as "cloud" | "local" });
+                  } catch {
+                    setData({ ...data, executionMode: prev });
+                    setError("Failed to update execution mode");
+                  }
+                }}
+              >
+                <SelectTrigger className="h-7 w-[200px] text-[12px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cloud">Cloud - server side</SelectItem>
+                  <SelectItem value="local">Local CLI - zero API cost</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {data.executionMode === "local" && (
+              <p className="text-[11px] text-muted-foreground/70">
+                Requires running <code className="rounded bg-muted px-1">aicib cloud-agent start</code> on your machine
+              </p>
+            )}
           </div>
         )}
       </section>
