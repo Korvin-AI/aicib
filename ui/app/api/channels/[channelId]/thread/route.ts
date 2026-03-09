@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { jsonError, parsePagination } from "@/lib/api-helpers";
 import { buildChannelThreadEntries, getChannelDefinition } from "@/lib/channels";
+import { isCloudMode } from "@/lib/cloud-mode";
+import { cloudFetch } from "@/lib/cloud-proxy";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +11,10 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ channelId: string }> }
 ) {
+  if (isCloudMode()) {
+    const { channelId } = await params;
+    return cloudFetch(request, `channels/${channelId}/thread`);
+  }
   try {
     const db = getDb();
     const { channelId } = await params;

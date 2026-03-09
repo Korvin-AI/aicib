@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { spawnSync } from "node:child_process";
+import { isCloudMode } from "@/lib/cloud-mode";
 
 export async function POST() {
+  if (isCloudMode()) {
+    return NextResponse.json({ error: "Not available in cloud mode" }, { status: 404 });
+  }
   try {
     const result = spawnSync(
       "osascript",

@@ -1,16 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Square, Play } from "lucide-react";
+import { Loader2, Square, Play, LogOut } from "lucide-react";
 import { useSSE } from "@/components/sse-provider";
 import { BusinessStopDialog } from "@/components/business-stop-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { useUIPreferences } from "@/lib/ui-preferences";
+import { useAuth } from "@/lib/auth-context";
 
 export function Topbar() {
   const { connected, lastEvent } = useSSE();
   const { uiMode, setUiMode } = useUIPreferences();
+  const { user, isCloudMode, logout } = useAuth();
   const [companyName, setCompanyName] = useState("AICIB");
   const [sessionActive, setSessionActive] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -127,7 +135,7 @@ export function Topbar() {
           {loading ? "Checking..." : sessionActive ? "Running" : "Stopped"}
         </div>
 
-        {sessionActive ? (
+        {!isCloudMode && (sessionActive ? (
           <Button
             size="sm"
             variant="destructive"
@@ -166,6 +174,26 @@ export function Topbar() {
               </>
             )}
           </Button>
+        ))}
+
+        {isCloudMode && user && (
+          <DropdownMenu>
+            <DropdownMenuTrigger className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary hover:bg-primary/20 focus:outline-none">
+              {(user.displayName || user.email).charAt(0).toUpperCase()}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem className="text-[12px] text-muted-foreground" disabled>
+                {user.email}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="gap-2 text-[12px]"
+                onSelect={() => logout()}
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                Log out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
 

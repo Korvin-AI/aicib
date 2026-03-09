@@ -3,6 +3,8 @@ import path from "node:path";
 import { NextResponse } from "next/server";
 import { stopBusinessSync } from "@/lib/business-commands";
 import { getResolvedBusiness } from "@/lib/business-context";
+import { isCloudMode } from "@/lib/cloud-mode";
+import { cloudFetchOrg } from "@/lib/cloud-proxy";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +13,8 @@ interface StopBusinessRequestBody {
 }
 
 export async function POST(request: Request) {
+  if (isCloudMode()) return cloudFetchOrg(request, "businesses/stop", { method: "POST" });
+
   try {
     const body = (await request.json().catch(() => ({}))) as StopBusinessRequestBody;
     const business = getResolvedBusiness(body.businessId);

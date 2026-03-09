@@ -17,9 +17,10 @@ export function BusinessBootstrapGuard({ children }: BusinessBootstrapGuardProps
 
     fetch("/api/businesses", { cache: "no-store" })
       .then((res) => res.json())
-      .then((payload: { hasAnyBusiness?: boolean }) => {
+      .then((payload: { hasAnyBusiness?: boolean; businesses?: unknown[] }) => {
         if (cancelled) return;
-        if (!payload.hasAnyBusiness) {
+        const hasBusiness = payload.hasAnyBusiness ?? (Array.isArray(payload.businesses) && payload.businesses.length > 0);
+        if (!hasBusiness) {
           router.replace("/businesses/new");
           return;
         }

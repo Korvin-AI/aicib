@@ -3,6 +3,7 @@ import path from "node:path";
 import { NextResponse } from "next/server";
 import { startBusinessDetached } from "@/lib/business-commands";
 import { upsertBusiness } from "@/lib/business-registry";
+import { isCloudMode } from "@/lib/cloud-mode";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,10 @@ function readConfigMetadata(projectDir: string): { name: string; template: strin
 }
 
 export async function POST(request: Request) {
+  if (isCloudMode()) {
+    return NextResponse.json({ error: "Import not available in cloud mode" }, { status: 404 });
+  }
+
   try {
     const body = (await request.json()) as ImportBusinessRequestBody;
     const rawDir = body.projectDir?.trim();

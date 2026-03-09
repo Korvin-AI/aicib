@@ -3,10 +3,13 @@ import { tryGetProjectDir } from "@/lib/config";
 import { getDb } from "@/lib/db";
 import { jsonError, safeAll, safeGet, tableExists } from "@/lib/api-helpers";
 import { readAppConfig } from "@/lib/config-read";
+import { isCloudMode } from "@/lib/cloud-mode";
+import { cloudFetch } from "@/lib/cloud-proxy";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
+  if (isCloudMode()) return cloudFetch(request, "status");
   try {
     const projectDir = tryGetProjectDir();
     if (!projectDir) {

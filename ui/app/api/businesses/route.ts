@@ -4,10 +4,13 @@ import {
   listBusinesses,
   readBusinessRegistry,
 } from "@/lib/business-registry";
+import { isCloudMode } from "@/lib/cloud-mode";
+import { cloudFetchOrg } from "@/lib/cloud-proxy";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
+  if (isCloudMode()) return cloudFetchOrg(request, "businesses");
   try {
     const registry = readBusinessRegistry();
     const businesses = listBusinesses()

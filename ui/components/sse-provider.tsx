@@ -8,6 +8,7 @@ import {
   useRef,
   type ReactNode,
 } from "react";
+import { useAuth } from "@/lib/auth-context";
 
 export interface SSEEvent {
   type: string;
@@ -25,12 +26,15 @@ const SSEContext = createContext<SSEContextValue>({
 });
 
 export function SSEProvider({ children }: { children: ReactNode }) {
+  const { loading: authLoading, isCloudMode } = useAuth();
   const [lastEvent, setLastEvent] = useState<SSEEvent | null>(null);
   const [connected, setConnected] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (isCloudMode && authLoading) return;
+
     let disposed = false;
 
     const connect = () => {
@@ -78,7 +82,7 @@ export function SSEProvider({ children }: { children: ReactNode }) {
         eventSourceRef.current.close();
       }
     };
-  }, []);
+  }, [isCloudMode, authLoading]);
 
   return (
     <SSEContext.Provider value={{ lastEvent, connected }}>

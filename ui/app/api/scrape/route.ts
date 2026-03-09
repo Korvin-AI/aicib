@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDbForProject, ensureWikiTable } from "@/lib/db-project";
+import { isCloudMode } from "@/lib/cloud-mode";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +39,10 @@ async function scrapeWithRetry(
 }
 
 export async function POST(request: Request) {
+  if (isCloudMode()) {
+    return NextResponse.json({ error: "Scraping not available in cloud mode" }, { status: 501 });
+  }
+
   try {
     const body = (await request.json()) as ScrapeRequestBody;
 
