@@ -104,3 +104,15 @@ export async function updateBusinessConfig(
     .returning();
   return updated ?? null;
 }
+
+export async function updateBusinessExecutionMode(
+  businessId: string,
+  mode: 'cloud' | 'local',
+) {
+  const [updated] = await db
+    .update(businesses)
+    .set({ executionMode: mode })
+    .where(eq(businesses.id, businessId))
+    .returning();
+  return updated ?? null;
+}

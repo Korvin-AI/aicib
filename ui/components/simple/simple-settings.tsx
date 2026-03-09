@@ -13,6 +13,7 @@ interface SettingsPayload {
     template: string;
     projectDir: string;
   };
+  executionMode?: "cloud" | "local";
   engine: {
     mode: "claude-code" | "claude-api";
     hasApiKey: boolean;
@@ -148,6 +149,10 @@ export function SimpleSettings() {
       case "controls":
         return (
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <SettingRow
+              label="Execution Mode"
+              value={data.executionMode === "local" ? "Local CLI" : "Cloud"}
+            />
             <SettingRow
               label="Safeguards"
               value={data.settings.safeguardsEnabled ? "Enabled" : "Disabled"}

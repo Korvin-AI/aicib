@@ -17,6 +17,7 @@ import "./core/reporting-register.js";
 import "./core/perf-review-register.js";
 import "./core/notifications-register.js";
 import "./core/events-register.js";
+import "./core/cloud-agent-register.js";
 
 import { Command } from "commander";
 import { initCommand } from "./cli/init.js";
@@ -150,6 +151,12 @@ import {
   eventsSetupCommand,
   eventsHistoryCommand,
 } from "./cli/events.js";
+import {
+  cloudAgentStartCommand,
+  cloudAgentStopCommand,
+  cloudAgentStatusCommand,
+  cloudAgentConfigureCommand,
+} from "./cli/cloud-agent.js";
 
 const program = new Command();
 
@@ -807,6 +814,33 @@ events
 events
   .option("-d, --dir <dir>", "Project directory", process.cwd())
   .action(eventsCommand);
+
+// --- Cloud Agent ---
+const cloudAgent = program.command("cloud-agent").description("Cloud agent daemon: run briefs locally for zero API cost");
+cloudAgent
+  .command("start")
+  .description("Start the cloud agent daemon")
+  .option("-d, --dir <dir>", "Project directory", process.cwd())
+  .action(cloudAgentStartCommand);
+cloudAgent
+  .command("stop")
+  .description("Stop the cloud agent daemon")
+  .option("-d, --dir <dir>", "Project directory", process.cwd())
+  .action(cloudAgentStopCommand);
+cloudAgent
+  .command("status")
+  .description("Show cloud agent daemon status")
+  .option("-d, --dir <dir>", "Project directory", process.cwd())
+  .action(cloudAgentStatusCommand);
+cloudAgent
+  .command("configure")
+  .description("Configure cloud agent connection")
+  .option("-d, --dir <dir>", "Project directory", process.cwd())
+  .action(cloudAgentConfigureCommand);
+// Default action: show status when bare `aicib cloud-agent` is run
+cloudAgent
+  .option("-d, --dir <dir>", "Project directory", process.cwd())
+  .action(cloudAgentStatusCommand);
 
 // --- Web UI ---
 program

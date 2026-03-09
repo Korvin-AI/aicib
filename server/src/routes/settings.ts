@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { getSettings } from '../repositories/settings-repo';
-import { updateBusinessConfig } from '../repositories/business-repo';
+import { updateBusinessConfig, updateBusinessExecutionMode } from '../repositories/business-repo';
 import { setOrgSecret, deleteOrgSecret, listOrgSecretKeys } from '../repositories/secrets-repo';
 import { validateBody } from '../middleware/validate';
 import { requireRole } from '../middleware/rbac';
@@ -53,6 +53,20 @@ settings.put(
     await setOrgSecret(orgId, 'anthropic_api_key', apiKey);
     const prefix = apiKey.slice(0, 7) + '...';
     return c.json({ success: true, prefix });
+  },
+);
+
+// PUT /settings/execution-mode — toggle cloud/local execution mode
+settings.put(
+  '/execution-mode',
+  requireRole('admin'),
+  validateBody(z.object({ executionMode: z.enum(['cloud', 'local']) })),
+  async (c) => {
+    const { businessId } = c.get('tenant');
+    const { executionMode } = c.req.valid('json');
+
+    await updateBusinessExecutionMode(businessId, executionMode);
+    return c.json({ executionMode });
   },
 );
 

@@ -1,5 +1,9 @@
 import { Hono } from 'hono';
 import { randomBytes, createHash } from 'node:crypto';
+import { eq, and } from 'drizzle-orm';
+import { z } from 'zod';
+import { db } from '../db/connection';
+import { apiKeys } from '../db/schema/index';
 import { validateBody } from '../middleware/validate';
 import { requireRole, ROLE_LEVELS } from '../middleware/rbac';
 import {
@@ -158,6 +162,84 @@ orgRoute.delete(
     const invitationId = c.req.param('id');
     const inv = await revokeInvitation(orgId, invitationId);
     if (!inv) throw notFoundError('Invitation not found or already processed');
+    return c.json({ success: true });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// API Key CRUD
+// ---------------------------------------------------------------------------
+
+const createApiKeySchema = z.object({
+  name: z.string().min(1).max(255),
+});
+
+// POST /org/api-keys — Generate new API key (admin+)
+orgRoute.post(
+  '/api-keys',
+  requireRole('admin'),
+  validateBody(createApiKeySchema),
+  async (c) => {
+    const { orgId } = c.get('auth');
+    const { name } = c.req.valid('json');
+
+    // Generate random key
+    const rawKey = `aicib_${randomBytes(32).toString('hex')}`;
+    const keyHash = createHash('sha256').update(rawKey).digest('hex');
+    const keyPrefix = rawKey.slice(0, 12);
+
+    const [apiKey] = await db
+      .insert(apiKeys)
+      .values({
+        orgId,
+        name,
+        keyHash,
+        keyPrefix,
+      })
+      .returning({
+        id: apiKeys.id,
+        name: apiKeys.name,
+        keyPrefix: apiKeys.keyPrefix,
+        createdAt: apiKeys.createdAt,
+      });
+
+    // Return plaintext key only once
+    return c.json({ apiKey: { ...apiKey, key: rawKey } }, 201);
+  },
+);
+
+// GET /org/api-keys — List keys (masked)
+orgRoute.get('/api-keys', requireRole('admin'), async (c) => {
+  const { orgId } = c.get('auth');
+
+  const keys = await db
+    .select({
+      id: apiKeys.id,
+      name: apiKeys.name,
+      keyPrefix: apiKeys.keyPrefix,
+      lastUsedAt: apiKeys.lastUsedAt,
+      createdAt: apiKeys.createdAt,
+    })
+    .from(apiKeys)
+    .where(eq(apiKeys.orgId, orgId));
+
+  return c.json({ apiKeys: keys });
+});
+
+// DELETE /org/api-keys/:id — Revoke key
+orgRoute.delete(
+  '/api-keys/:id',
+  requireRole('admin'),
+  async (c) => {
+    const { orgId } = c.get('auth');
+    const keyId = c.req.param('id');
+
+    const [deleted] = await db
+      .delete(apiKeys)
+      .where(and(eq(apiKeys.id, keyId), eq(apiKeys.orgId, orgId)))
+      .returning({ id: apiKeys.id });
+
+    if (!deleted) throw notFoundError('API key not found');
     return c.json({ success: true });
   },
 );
