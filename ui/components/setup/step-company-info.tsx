@@ -97,11 +97,9 @@ export function StepCompanyInfo({
           placeholder="https://yourcompany.com"
           className="bg-muted/50"
         />
-        {!IS_CLOUD && (
-          <p className="text-xs text-muted-foreground">
-            We&apos;ll import your website content when you launch.
-          </p>
-        )}
+        <p className="text-xs text-muted-foreground">
+          We&apos;ll import your website content when you launch.
+        </p>
       </div>
 
       {/* Project folder (local mode only) */}
@@ -134,19 +132,17 @@ export function StepCompanyInfo({
         </div>
       )}
 
-      {/* Document upload (local mode only) */}
-      {!IS_CLOUD && (
-        <div className="space-y-2">
-          <Label className="text-sm font-medium">
-            Upload Documents{" "}
-            <span className="font-normal text-muted-foreground">(optional)</span>
-          </Label>
-          <p className="text-xs text-muted-foreground">
-            Share existing materials so your AI team can learn about your business.
-          </p>
-          <FileDropzone files={files} onChange={onFilesChange} />
-        </div>
-      )}
+      {/* Document upload */}
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">
+          Upload Documents{" "}
+          <span className="font-normal text-muted-foreground">(optional)</span>
+        </Label>
+        <p className="text-xs text-muted-foreground">
+          Share existing materials so your AI team can learn about your business.
+        </p>
+        <FileDropzone files={files} onChange={onFilesChange} />
+      </div>
 
       {/* Next button */}
       <div className="flex justify-end pt-2">
