@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FolderInput } from "@/components/folder-input";
 import { FileDropzone } from "./file-dropzone";
+import { isCloudMode } from "@/lib/cloud-mode";
 import type { WizardConfig } from "./setup-wizard";
 
 interface StepCompanyInfoProps {
@@ -23,6 +24,7 @@ export function StepCompanyInfo({
   onFilesChange,
   onNext,
 }: StepCompanyInfoProps) {
+  const IS_CLOUD = isCloudMode();
   const [nameError, setNameError] = useState<string | null>(null);
   const [pathError, setPathError] = useState<string | null>(null);
 
@@ -42,7 +44,7 @@ export function StepCompanyInfo({
       setNameError("Name must be 100 characters or less");
       return false;
     }
-    if (!projectDir) {
+    if (!IS_CLOUD && !projectDir) {
       setPathError("Project folder is required");
       return false;
     }
@@ -95,50 +97,56 @@ export function StepCompanyInfo({
           placeholder="https://yourcompany.com"
           className="bg-muted/50"
         />
-        <p className="text-xs text-muted-foreground">
-          We&apos;ll import your website content when you launch.
-        </p>
-      </div>
-
-      {/* Project folder */}
-      <div className="space-y-2">
-        <Label htmlFor="project-dir" className="text-sm font-medium">
-          Project Folder
-        </Label>
-        <FolderInput
-          id="project-dir"
-          value={config.projectDir}
-          onChange={(val) => {
-            updateConfig({ projectDir: val });
-            if (pathError) setPathError(null);
-          }}
-          autoSuggestBase={config.companyName}
-          className="bg-muted/50"
-          onKeyDown={(e) => {
-            if (e.key === "Enter") handleNext();
-          }}
-        />
-        {pathError ? (
-          <p className="text-xs text-destructive">{pathError}</p>
-        ) : (
+        {!IS_CLOUD && (
           <p className="text-xs text-muted-foreground">
-            Browse for a folder or type a full path. We will create the business
-            there.
+            We&apos;ll import your website content when you launch.
           </p>
         )}
       </div>
 
-      {/* Document upload */}
-      <div className="space-y-2">
-        <Label className="text-sm font-medium">
-          Upload Documents{" "}
-          <span className="font-normal text-muted-foreground">(optional)</span>
-        </Label>
-        <p className="text-xs text-muted-foreground">
-          Share existing materials so your AI team can learn about your business.
-        </p>
-        <FileDropzone files={files} onChange={onFilesChange} />
-      </div>
+      {/* Project folder (local mode only) */}
+      {!IS_CLOUD && (
+        <div className="space-y-2">
+          <Label htmlFor="project-dir" className="text-sm font-medium">
+            Project Folder
+          </Label>
+          <FolderInput
+            id="project-dir"
+            value={config.projectDir}
+            onChange={(val) => {
+              updateConfig({ projectDir: val });
+              if (pathError) setPathError(null);
+            }}
+            autoSuggestBase={config.companyName}
+            className="bg-muted/50"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleNext();
+            }}
+          />
+          {pathError ? (
+            <p className="text-xs text-destructive">{pathError}</p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Browse for a folder or type a full path. We will create the business
+              there.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Document upload (local mode only) */}
+      {!IS_CLOUD && (
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">
+            Upload Documents{" "}
+            <span className="font-normal text-muted-foreground">(optional)</span>
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            Share existing materials so your AI team can learn about your business.
+          </p>
+          <FileDropzone files={files} onChange={onFilesChange} />
+        </div>
+      )}
 
       {/* Next button */}
       <div className="flex justify-end pt-2">
