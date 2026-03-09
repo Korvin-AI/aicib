@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { isCloudMode } from "@/lib/cloud-mode";
 import type { WizardConfig, AgentConfig } from "./setup-wizard";
 
 interface StepLaunchProps {
@@ -145,6 +146,7 @@ export function StepLaunch({
   files,
   onBack,
 }: StepLaunchProps) {
+  const IS_CLOUD = isCloudMode();
   const [phase, setPhase] = useState<LaunchPhase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [failedUploads, setFailedUploads] = useState<string[]>([]);
@@ -190,7 +192,7 @@ export function StepLaunch({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           companyName: config.companyName.trim(),
-          projectDir: config.projectDir.trim(),
+          projectDir: IS_CLOUD ? "" : config.projectDir.trim(),
           template: "saas-startup",
           persona: "professional",
           agents: agentsMap,
@@ -209,8 +211,8 @@ export function StepLaunch({
         throw new Error(data?.error || "Business creation failed");
       }
 
-      // 2. Upload files one by one
-      if (files.length > 0) {
+      // 2. Upload files one by one (local mode only)
+      if (!IS_CLOUD && files.length > 0) {
         setPhase("uploading");
         const failed: string[] = [];
         for (const file of files) {
@@ -233,8 +235,8 @@ export function StepLaunch({
         }
       }
 
-      // 3. Scrape website if URL provided
-      if (config.websiteUrl.trim()) {
+      // 3. Scrape website if URL provided (local mode only)
+      if (!IS_CLOUD && config.websiteUrl.trim()) {
         setPhase("scraping");
         const scrapeRes = await fetch("/api/scrape", {
           method: "POST",
