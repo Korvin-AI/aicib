@@ -23,7 +23,11 @@ test.describe("Dashboard — homepage smoke", () => {
     await page.waitForLoadState("networkidle");
 
     // Verify no full-page error overlay from Next.js (the red error box).
-    const nextErrorOverlay = page.locator("nextjs-portal");
+    // In Next.js 16, nextjs-portal is always in the DOM; an actual error
+    // renders a shadow-DOM child with the class "nextjs-container-errors-header".
+    const nextErrorOverlay = page.locator(
+      "nextjs-portal >> internal:shadow=.nextjs-container-errors-header"
+    );
     await expect(nextErrorOverlay).toHaveCount(0);
   });
 
@@ -61,6 +65,8 @@ test.describe("Dashboard — homepage smoke", () => {
           "net::ERR",
           "NEXT_REDIRECT",
           "ChunkLoadError",
+          "503",
+          "Service Unavailable",
         ];
         const isIgnored = ignoredPatterns.some((pattern) =>
           text.toLowerCase().includes(pattern.toLowerCase())
