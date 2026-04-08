@@ -22,7 +22,7 @@
     "argon2": "^0.41.0",
     "bullmq": "^5.30.0",
     "dotenv": "^16.4.0",
-    "drizzle-orm": "^0.39.0",
+    "drizzle-orm": "^0.45.2",
     "hono": "^4.7.0",
     "ioredis": "^5.4.0",
     "postgres": "^3.4.5",
